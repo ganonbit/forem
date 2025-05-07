@@ -133,7 +133,7 @@
     "esbuild-plugin-svgr": "^2.1.0",
     "file-loader": "^6.2.0",
     "focus-trap": "^6.9.4",
-    "focus-visible": "^5.2.0",
+    "focus-visible": "^5.2.1",
     "freezeframe": "^5.0.2",
     "he": "^1.2.0",
     "i18n-js": "^4.4.3",
