@@ -1,34 +1,55 @@
 require "rails_helper"
 
-RSpec.describe "/admin/reports", type: :request do
+RSpec.describe "/admin/moderation/reports" do
   let(:feedback_message)  { create(:feedback_message, :abuse_report) }
   let(:user)              { create(:user) }
   let(:trusted_user)      { create(:user, :trusted) }
   let(:admin)             { create(:user, :super_admin) }
 
-  describe "GET /admin/reports" do
+  describe "GET /admin/moderation/reports" do
     let(:single_resource_admin) { create(:user, :single_resource_admin, resource: FeedbackMessage) }
 
     context "when the user is a single resource admin" do
       it "renders with status 200" do
         sign_in single_resource_admin
         get admin_reports_path
-        expect(response.status).to eq 200
+        expect(response).to have_http_status :ok
       end
     end
 
-    context "when there is a vomit reaction on a user" do
+    context "when there is a vomit reaction on a user with score > -150 and created in the last two weeks" do
       it "renders with status 200" do
         trusted_user
-        create(:reaction, category: "vomit", reactable: user, user: trusted_user)
+        # Assume User model has a score attribute
+        user.update!(score: -100) # Ensure the user's score is greater than -150
+        create(:reaction, category: "vomit", reactable: user, user: trusted_user, created_at: 1.week.ago)
         sign_in admin
         get admin_reports_path
-        expect(response.status).to eq 200
+        expect(response).to have_http_status :ok
+        expect(response.body).to include(user.username)
+      end
+
+      it "does not render if the reaction is older than two weeks" do
+        trusted_user
+        user.update!(score: -100)
+        create(:reaction, category: "vomit", reactable: user, user: trusted_user, created_at: 3.weeks.ago)
+        sign_in admin
+        get admin_reports_path
+        expect(response.body).not_to include(user.username)
+      end
+
+      it "does not render if the reactable score is <= -150" do
+        trusted_user
+        user.update!(score: -200) # Ensure the user's score is less than or equal to -150
+        create(:reaction, category: "vomit", reactable: user, user: trusted_user, created_at: 1.week.ago)
+        sign_in admin
+        get admin_reports_path
+        expect(response.body).not_to include(user.username)
       end
     end
   end
 
-  describe "POST /save_status" do
+  describe "POST /admin/moderation/reports/save_status" do
     context "when a valid request is made" do
       let(:save_status_params) do
         {
@@ -71,7 +92,6 @@ RSpec.describe "/admin/reports", type: :request do
         {
           feedback_message_id: send_email_params[:feedback_message_id],
           subject: send_email_params[:email_subject],
-          utm_campaign: send_email_params[:email_type],
           to: send_email_params[:email_to]
         }.stringify_keys
       end
@@ -87,6 +107,7 @@ RSpec.describe "/admin/reports", type: :request do
       end
 
       it "creates a new email message with the same params" do
+        allow(ForemInstance).to receive(:smtp_enabled?).and_return(true)
         post send_email_admin_reports_path, params: send_email_params
 
         expect(EmailMessage.last.attributes).to include(email_message_attributes)
@@ -94,7 +115,7 @@ RSpec.describe "/admin/reports", type: :request do
     end
   end
 
-  describe "POST /admin/reports/create_note" do
+  describe "POST /admin/moderation/reports/create_note" do
     context "when a valid request is made" do
       let(:note_params) do
         {

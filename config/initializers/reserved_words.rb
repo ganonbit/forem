@@ -33,7 +33,6 @@ class ReservedWords
     challenge
     changelog
     chat
-    chat_channels
     code
     code-of-conduct
     coffee
@@ -117,6 +116,8 @@ class ReservedWords
     links
     linux
     listen
+    listing
+    listings
     live
     live_articles
     loop
@@ -170,6 +171,8 @@ class ReservedWords
     questions
     rails
     reactions
+    react
+    reactjs
     readinglist
     repo
     report-abuse

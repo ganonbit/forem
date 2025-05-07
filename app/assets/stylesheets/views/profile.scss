@@ -2,14 +2,12 @@
 
 .profile-header {
   --padding: var(--su-3);
-  border-radius: 0;
 
   @media (min-width: $breakpoint-s) {
     --padding: var(--su-4);
   }
 
   @media (min-width: $breakpoint-m) {
-    border-radius: var(--radius);
     text-align: center;
   }
 
@@ -34,6 +32,8 @@
     right: 0;
     top: var(--su-7);
     position: absolute;
+    left: 0;
+    justify-content: flex-end;
     padding: var(--padding) var(--padding) 0 0;
 
     @media (min-width: $breakpoint-m) {
@@ -43,7 +43,10 @@
 
   &__details {
     padding: var(--padding);
-    padding-top: 0;
+  }
+
+  &__bio {
+    white-space: pre-wrap;
   }
 
   &__meta {
@@ -74,6 +77,14 @@
       flex-wrap: nowrap;
       white-space: nowrap;
       padding: var(--su-2) var(--su-2);
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+
+      & > span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
 
       @media (min-width: $breakpoint-m) {
         padding: var(--su-1) var(--su-3);
@@ -167,4 +178,17 @@
   &:last-child {
     border-bottom: unset;
   }
+}
+
+.badge-indicator {
+  font-size: var(--fs-s);
+  color: var(--base-0);
+  width: var(--su-6);
+  height: var(--su-6);
+  line-height: var(--su-6);
+  position: absolute;
+  background-color: var(--accent-brand);
+  right: var(--su-1);
+  bottom: -5px;
+  border-radius: 100%;
 }

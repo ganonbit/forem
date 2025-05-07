@@ -7,7 +7,7 @@
  *  "attribute_name": "website_url",
  *  "description": null,
  *  "input_type": "text_input",
- *  "label": "Webiste URL",
+ *  "label": "Website URL",
  *  "placeholder_text": ""
  *}
  *
@@ -24,9 +24,17 @@ import { h } from 'preact';
 import PropTypes from 'prop-types';
 import { FormField } from '@crayons';
 
-function TextInput(props) {
-  const { onFieldChange } = props;
-  const { attribute_name, placeholder_text, description, label } = props.field;
+export function TextInput(props) {
+  const { onFieldChange, field } = props;
+  const {
+    attribute_name,
+    placeholder_text,
+    default_value,
+    description,
+    label,
+    required,
+    maxLength,
+  } = field;
 
   return (
     <FormField>
@@ -36,9 +44,12 @@ function TextInput(props) {
       <input
         class="crayons-textfield"
         placeholder={placeholder_text}
+        defaultValue={default_value}
         name={attribute_name}
         id={attribute_name}
         onChange={onFieldChange}
+        required={required ? 'required' : ''}
+        maxLength={maxLength}
       />
       {description && <p class="crayons-field__description">{description}</p>}
     </FormField>
@@ -52,7 +63,6 @@ TextInput.propTypes = {
     description: PropTypes.string.isRequired,
     label: PropTypes.string.isRequired,
     input_type: PropTypes.string.isRequired,
+    maxLength: PropTypes.number,
   }).isRequired,
 };
-
-export default TextInput;

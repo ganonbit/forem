@@ -1,13 +1,13 @@
 module UserSubscriptions
-  # When creating a UserSubscription from a controller/user interation on the
+  # When creating a UserSubscription from a controller/user interaction on the
   # frontend, we need to do some extra validations and logic.
   class CreateFromControllerParams
     attr_reader :user, :source_type, :source_id, :subscriber_email, :response
 
     Response = Struct.new(:success, :data, :error, keyword_init: true)
 
-    def self.call(*args)
-      new(*args).call
+    def self.call(...)
+      new(...).call
     end
 
     def initialize(user, user_subscription_params)
@@ -52,7 +52,7 @@ module UserSubscriptions
     def invalid_source?(source)
       return false if source
 
-      response.error = "Source not found."
+      response.error = I18n.t("services.user_subscriptions.create_from_controller_params.source_not_found")
       true
     end
 
@@ -64,7 +64,7 @@ module UserSubscriptions
       # consented to share their old email address instead of the current one.
       return false if user.email == subscriber_email
 
-      response.error = "Subscriber email mismatch."
+      response.error = I18n.t("services.user_subscriptions.create_from_controller_params.email_mismatch")
       true
     end
   end

@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe PodcastEpisode, type: :model do
+RSpec.describe PodcastEpisode do
   let(:podcast_episode) { create(:podcast_episode) }
 
   describe "validations" do
@@ -20,11 +20,6 @@ RSpec.describe PodcastEpisode, type: :model do
       it { is_expected.to validate_presence_of(:title) }
     end
 
-    # Couldn't use shoulda matchers for these tests because:
-    # Shoulda uses `save(validate: false)` which skips validations, but runs callbacks
-    # So an invalid record is saved and the elasticsearch callback fails because there's no associated podcast
-    # https://git.io/fjg2g
-
     it "validates guid uniqueness" do
       ep2 = build(:podcast_episode, guid: podcast_episode.guid)
 
@@ -37,23 +32,6 @@ RSpec.describe PodcastEpisode, type: :model do
 
       expect(ep2).not_to be_valid
       expect(ep2.errors[:media_url]).to be_present
-    end
-  end
-
-  describe "#after_commit" do
-    it "on update enqueues job to index podcast_episode to elasticsearch" do
-      podcast_episode.save
-      sidekiq_assert_enqueued_with(job: Search::IndexWorker, args: [described_class.to_s, podcast_episode.id]) do
-        podcast_episode.save
-      end
-    end
-
-    it "on destroy enqueues job to delete podcast_episode from elasticsearch" do
-      podcast_episode.save
-      sidekiq_assert_enqueued_with(job: Search::RemoveFromIndexWorker,
-                                   args: [described_class::SEARCH_CLASS.to_s, podcast_episode.search_id]) do
-        podcast_episode.destroy
-      end
     end
   end
 
@@ -84,14 +62,14 @@ RSpec.describe PodcastEpisode, type: :model do
     it "is not available when unreachable" do
       expect do
         create(:podcast_episode, podcast: podcast, reachable: false)
-      end.to change(described_class.available, :count).by(0)
+      end.not_to change(described_class.available, :count)
     end
 
     it "is not available when podcast is unpublished" do
       expect do
         podcast = create(:podcast, published: false)
         create(:podcast_episode, podcast: podcast)
-      end.to change(described_class.available, :count).by(0)
+      end.not_to change(described_class.available, :count)
     end
   end
 
@@ -118,7 +96,7 @@ RSpec.describe PodcastEpisode, type: :model do
       end
     end
 
-    describe "Cloudinary configuration and processing" do
+    describe "Cloudinary configuration and processing", :cloudinary do
       it "prefixes an image URL with a path" do
         image_url = "https://dummyimage.com/10x10"
         podcast_episode.body = "<img src=\"#{image_url}\">"
@@ -151,6 +129,15 @@ RSpec.describe PodcastEpisode, type: :model do
                                    args: [podcast_episode.id, podcast_episode.path, podcast_episode.podcast_slug]) do
         podcast_episode.save
       end
+    end
+  end
+
+  context "when indexing with Algolia", :algolia do
+    it "triggers indexing on save" do
+      allow(AlgoliaSearch::SearchIndexWorker).to receive(:perform_async)
+      create(:podcast_episode)
+      expect(AlgoliaSearch::SearchIndexWorker).to have_received(:perform_async).with("PodcastEpisode",
+                                                                                     kind_of(Integer), false).once
     end
   end
 end

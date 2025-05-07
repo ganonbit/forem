@@ -2,11 +2,16 @@ import { h } from 'preact';
 import PropTypes from 'prop-types';
 import { OrganizationPicker } from '../../organization/OrganizationPicker';
 
-export const PageTitle = ({ organizations, organizationId, onToggle }) => {
+export const PageTitle = ({
+  organizations,
+  organizationId,
+  onToggle,
+  previewLoading,
+}) => {
   return (
     <div className="crayons-field__label flex items-center flex-1">
       <span className="hidden s:inline-block mr-2 whitespace-nowrap">
-        Write a new post
+        {previewLoading ? 'Loading preview' : 'Create Post'}
       </span>
       {organizations && organizations.length > 0 && (
         <div>
@@ -26,9 +31,10 @@ export const PageTitle = ({ organizations, organizationId, onToggle }) => {
 };
 
 PageTitle.propTypes = {
-  organizations: PropTypes.string.isRequired,
-  organizationId: PropTypes.string.isRequired,
-  onToggle: PropTypes.string.isRequired,
+  organizations: PropTypes.arrayOf(PropTypes.string).isRequired,
+  organizationId: PropTypes.string,
+  onToggle: PropTypes.func.isRequired,
+  previewLoading: PropTypes.bool.isRequired,
 };
 
 PageTitle.displayName = 'Organization';

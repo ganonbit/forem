@@ -1,9 +1,10 @@
 let isFullScreenModeCodeOn = false;
 let screenScroll = 0;
-const fullScreenWindow = document.getElementsByClassName(
-  'js-fullscreen-code',
-)[0];
-const body = document.body;
+const { body } = document;
+
+export function getFullScreenModeStatus() {
+  return isFullScreenModeCodeOn;
+}
 
 function setAfterFullScreenScrollPosition() {
   window.scrollTo(0, screenScroll);
@@ -13,7 +14,7 @@ function getBeforeFullScreenScrollPosition() {
   screenScroll = window.scrollY;
 }
 
-function onPressEscape(event) {
+export function onPressEscape(event) {
   if (event.key == 'Escape') {
     fullScreenModeControl(event);
   }
@@ -27,6 +28,18 @@ function listenToKeyboardForEscape(listen) {
   }
 }
 
+export function onPopstate() {
+  fullScreenModeControl();
+}
+
+function listenToWindowForPopstate(listen) {
+  if (listen) {
+    window.addEventListener('popstate', onPopstate);
+  } else {
+    window.removeEventListener('popstate', onPopstate);
+  }
+}
+
 function toggleOverflowForDocument(overflow) {
   if (overflow) {
     body.style.overflow = 'hidden';
@@ -35,9 +48,9 @@ function toggleOverflowForDocument(overflow) {
   }
 }
 
-function addFullScreenModeControl(elements) {
+export function addFullScreenModeControl(elements) {
   if (elements) {
-    for (let element of elements) {
+    for (const element of elements) {
       element.addEventListener('click', fullScreenModeControl);
     }
   }
@@ -45,14 +58,16 @@ function addFullScreenModeControl(elements) {
 
 function removeFullScreenModeControl(elements) {
   if (elements) {
-    for (let element of elements) {
+    for (const element of elements) {
       element.removeEventListener('click', fullScreenModeControl);
     }
   }
 }
 
 function fullScreenModeControl(event) {
-  const codeBlock = event.currentTarget.closest('.js-code-highlight')
+  const fullScreenWindow =
+    document.getElementsByClassName('js-fullscreen-code')[0];
+  const codeBlock = event?.currentTarget.closest('.js-code-highlight')
     ? event.currentTarget.closest('.js-code-highlight').cloneNode(true)
     : null;
   const codeBlockControls = codeBlock
@@ -63,6 +78,7 @@ function fullScreenModeControl(event) {
     toggleOverflowForDocument(false);
     setAfterFullScreenScrollPosition();
     listenToKeyboardForEscape(false);
+    listenToWindowForPopstate(false);
     removeFullScreenModeControl(codeBlockControls);
 
     fullScreenWindow.classList.remove('is-open');
@@ -73,6 +89,8 @@ function fullScreenModeControl(event) {
     toggleOverflowForDocument(true);
     getBeforeFullScreenScrollPosition();
     listenToKeyboardForEscape(true);
+    listenToWindowForPopstate(true);
+
     codeBlock.classList.add('is-fullscreen');
     fullScreenWindow.appendChild(codeBlock);
     fullScreenWindow.classList.add('is-open');
@@ -82,5 +100,3 @@ function fullScreenModeControl(event) {
     isFullScreenModeCodeOn = true;
   }
 }
-
-export default addFullScreenModeControl;

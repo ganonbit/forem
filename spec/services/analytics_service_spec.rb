@@ -27,17 +27,17 @@ RSpec.describe AnalyticsService, type: :service do
 
   describe "initialization" do
     it "raises an error if start date is invalid" do
-      expect(-> { described_class.new(user, start_date: "2000-") }).to raise_error(ArgumentError)
+      expect { described_class.new(user, start_date: "2000-") }.to raise_error(ArgumentError)
     end
 
     it "raises an error if end date is invalid" do
-      expect(-> { described_class.new(user, end_date: "2000-") }).to raise_error(ArgumentError)
+      expect { described_class.new(user, end_date: "2000-") }.to raise_error(ArgumentError)
     end
 
     it "raises an error if an article does not belong to the user" do
       other_user = create(:user)
       article = create(:article, user: other_user)
-      expect(-> { described_class.new(user, article_id: article.id) }).to raise_error(ArgumentError)
+      expect { described_class.new(user, article_id: article.id) }.to raise_error(ArgumentError)
     end
   end
 
@@ -410,14 +410,14 @@ RSpec.describe AnalyticsService, type: :service do
         expect(analytics_service.referrers[:domains]).to be_empty
       end
 
-      it "returns the domains ordered by count" do
+      it "returns the domains ordered by number of views" do
         other_url = Faker::Internet.url
         create_list(:page_view, 2, user: user, article: article, referrer: other_url)
         top_url = Faker::Internet.url
-        create_list(:page_view, 3, user: user, article: article, referrer: top_url)
+        create_list(:page_view, 3, user: user, article: article, referrer: top_url, counts_for_number_of_views: 10)
 
         expected_result = [
-          { domain: Addressable::URI.parse(top_url).domain, count: 3 },
+          { domain: Addressable::URI.parse(top_url).domain, count: 30 },
           { domain: Addressable::URI.parse(other_url).domain, count: 2 },
         ]
         expect(analytics_service.referrers[:domains]).to eq(expected_result)
@@ -433,7 +433,9 @@ RSpec.describe AnalyticsService, type: :service do
       it "returns the most visited domain if asked for only one result" do
         top_url = Faker::Internet.url
         create_list(:page_view, 3, user: user, article: article, referrer: top_url)
-        other_url = Faker::Internet.url
+        # Faker url's generate colliding domain names about 1 to two times in 10,000
+        # Faker domains never end in ".dev" so this is a safe choice
+        other_url = Faker::Internet.url(host: "forem.dev")
         create_list(:page_view, 2, user: user, article: article, referrer: other_url)
 
         top_domain = Addressable::URI.parse(top_url).domain

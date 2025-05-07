@@ -2,7 +2,7 @@ import { h } from 'preact';
 import { render } from '@testing-library/preact';
 import { axe } from 'jest-axe';
 
-import NextPageButton from '../components/NextPageButton';
+import { NextPageButton } from '../components/NextPageButton';
 
 describe('<NextPageButton />', () => {
   const defaultProps = {
@@ -20,7 +20,7 @@ describe('<NextPageButton />', () => {
   it('should show a button', () => {
     const { queryByText } = render(<NextPageButton {...defaultProps} />);
 
-    expect(queryByText(/load more/i)).toBeDefined();
+    expect(queryByText(/load more/i)).toExist();
   });
 
   it('should call the onclick handler', () => {

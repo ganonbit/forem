@@ -14,21 +14,18 @@ RSpec.describe Users::DeleteArticles, type: :service do
     expect(Article.find(article3.id)).to be_present
   end
 
-  it "removes article from Elasticsearch" do
-    sidekiq_perform_enqueued_jobs
-    expect(article.elasticsearch_doc).not_to be_nil
-
-    sidekiq_perform_enqueued_jobs { described_class.call(user) }
-    expect { article.elasticsearch_doc }.to raise_error(Search::Errors::Transport::NotFound)
+  it "deletes the articles' discussion locks before deleting the article" do
+    create(:discussion_lock, article: article, locking_user: user)
+    expect do
+      described_class.call(user)
+    end.to change(DiscussionLock, :count).from(1).to(0)
   end
 
   context "with comments" do
-    let(:buster) { double }
-
     before do
-      allow(buster).to receive(:bust_comment)
-      allow(buster).to receive(:bust_article)
-      allow(buster).to receive(:bust_user)
+      allow(EdgeCache::BustComment).to receive(:call)
+      allow(EdgeCache::BustArticle).to receive(:call)
+      allow(EdgeCache::BustUser).to receive(:call)
 
       create_list(:comment, 2, commentable: article, user: user2)
     end
@@ -38,32 +35,11 @@ RSpec.describe Users::DeleteArticles, type: :service do
       expect(Comment.where(commentable_id: article.id, commentable_type: "Article").any?).to be false
     end
 
-    it "deletes articles' buffer updates" do
-      BufferUpdate.buff!(article.id, "twitter_buffer_text")
-
-      described_class.call(user)
-
-      expect(BufferUpdate.where(article_id: article.id).any?).to be false
-    end
-
     it "busts cache" do
-      described_class.call(user, buster)
-      expect(buster).to have_received(:bust_comment).with(article).twice
-      expect(buster).to have_received(:bust_user).with(user2).at_least(:once)
-      expect(buster).to have_received(:bust_article).with(article)
-    end
-
-    it "removes comments from Elasticsearch", :aggregate_failures do
-      sidekiq_perform_enqueued_jobs
-      comments = article.comments
-      comments.each { |comment| expect(comment.elasticsearch_doc).not_to be_nil }
-      sidekiq_perform_enqueued_jobs(only: Search::RemoveFromIndexWorker) do
-        described_class.call(user)
-      end
-
-      comments.each do |comment|
-        expect { comment.elasticsearch_doc }.to raise_error(Search::Errors::Transport::NotFound)
-      end
+      described_class.call(user)
+      expect(EdgeCache::BustComment).to have_received(:call).with(article).twice
+      expect(EdgeCache::BustUser).to have_received(:call).with(user2).at_least(:once)
+      expect(EdgeCache::BustArticle).to have_received(:call).with(article)
     end
   end
 end

@@ -1,7 +1,9 @@
-<%= form_tag("/admin/podcasts", method: "get", class: "mb-6") do %>
-  <div class="form-group">
-    <%= text_field_tag(:search, params[:search], aria: { label: "Search" }) %>
-    <%= submit_tag("Search") %>
+<h1 class="crayons-title mb-3">Podcasts</h1>
+
+<%= form_tag(admin_podcasts_path, method: "get") do %>
+  <div class="inline-flex">
+    <%= text_field_tag(:search, params[:search], aria: { label: "Search" }, class: "crayons-textfield", autocomplete: "off") %>
+    <%= submit_tag("Search", class: "crayons-btn ml-2") %>
   </div>
 <% end %>
 
@@ -17,13 +19,13 @@
       <th scope="col">Reach</th>
       <th scope="col">Pub</th>
       <th scope="col">Status Notice</th>
-      <th scope="col">Admin</th>
+      <th scope="col">Owners</th>
     </tr>
   </thead>
   <tbody class="crayons-card">
     <% @podcasts.each do |podcast| %>
       <tr>
-        <td><%= podcast.id %></td>
+        <td class="whitespace-nowrap"><%= podcast.id %></td>
         <td><%= link_to podcast.title, edit_admin_podcast_path(podcast) %></td>
         <td><%= link_to podcast.feed_url, podcast.feed_url %></td>
         <td><%= podcast.episodes_count %></td>
@@ -31,8 +33,8 @@
         <td><%= podcast.published %></td>
         <td><%= podcast.status_notice %></td>
         <td>
-          <% podcast.admins.pluck(:username).each do |username| %>
-            <%= link_to "@#{username}", "/#{username}" %>
+          <% podcast.owners.select(:username).each do |user| %>
++            <p><%= link_to "@#{user.username}", user_url(user), target: "_blank", rel: :noopener %></p>
           <% end %>
         </td>
       </tr>

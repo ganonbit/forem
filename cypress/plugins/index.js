@@ -1,4 +1,6 @@
 /// <reference types="cypress" />
+/* eslint-env node */
+
 // ***********************************************************
 // This example plugins/index.js can be used to load plugins
 //
@@ -15,7 +17,22 @@
 /**
  * @type {Cypress.PluginConfig}
  */
-module.exports = (_on, _config) => {
+module.exports = (on, config) => {
   // `on` is used to hook into various events Cypress emits
   // `config` is the resolved Cypress config
+  require('@cypress/code-coverage/task')(on, config);
+  config.env = {
+    ...config.env,
+    ...process.env,
+  };
+
+  const { E2E_FOLDER = 'seededFlows' } = process.env;
+
+  config.specPattern = `**/${E2E_FOLDER}/**/*.spec.js`;
+
+  on('task', {
+    failed: require('cypress-failed-log/src/failed')(),
+  });
+
+  return config;
 };

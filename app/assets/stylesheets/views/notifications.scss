@@ -9,14 +9,12 @@
 
   display: flex;
   color: var(--base-80);
-  border-radius: 0;
 
   @media (min-width: $breakpoint-s) {
     --padding: var(--su-4);
   }
   @media (min-width: $breakpoint-m) {
     --padding: var(--su-5);
-    border-radius: var(--radius);
   }
 
   &--middle {
@@ -42,6 +40,10 @@
     // built using CSS `grid`. Without this, the grid layout wouldn't stick to its defined
     // widths...
     min-width: 0;
+
+    img {
+      vertical-align: bottom;
+    }
   }
 
   &__mod-controls {
@@ -97,6 +99,10 @@
         padding: var(--su-3);
         padding-bottom: var(--su-4);
       }
+    }
+
+    .editor-toolbar {
+      display: none;
     }
   }
 
@@ -160,6 +166,7 @@
   .reaction-icon {
     --not-reacted-display: inline-block;
     --reacted-display: none;
+    filter: grayscale(1);
     &.not-reacted {
       display: var(--not-reacted-display);
     }
@@ -170,6 +177,7 @@
 
   &.reacted {
     .reaction-icon {
+      filter: grayscale(0);
       --not-reacted-display: none;
       --reacted-display: inline-block;
     }

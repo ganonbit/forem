@@ -3,8 +3,7 @@ module Users
     MASCOT_PARAMS = {
       email: "mascot@forem.com",
       username: "mascot",
-      name: "Mascot",
-      profile_image: SiteConfig.mascot_image_url,
+      profile_image: Settings::General.mascot_image_url,
       confirmed_at: Time.current,
       registered_at: Time.current,
       password: SecureRandom.hex
@@ -15,15 +14,18 @@ module Users
     end
 
     def call
-      raise "Mascot already set" if SiteConfig.mascot_user_id
+      raise I18n.t("create_mascot.error") if Settings::General.mascot_user_id
 
       mascot = User.create!(mascot_params)
-      SiteConfig.mascot_user_id = mascot.id
+      Settings::General.mascot_user_id = mascot.id
     end
 
     def mascot_params
-      # Set the password_confirmation
-      MASCOT_PARAMS.merge(password_confirmation: MASCOT_PARAMS[:password])
+      # Set the password_confirmation and i18n name
+      MASCOT_PARAMS.merge(
+        name: I18n.t("create_mascot.name"),
+        password_confirmation: MASCOT_PARAMS[:password],
+      )
     end
   end
 end

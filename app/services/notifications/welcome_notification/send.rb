@@ -2,16 +2,16 @@
 module Notifications
   module WelcomeNotification
     class Send
+      def self.call(...)
+        new(...).call
+      end
+
       def initialize(receiver_id, welcome_broadcast)
         @receiver_id = receiver_id
         @welcome_broadcast = welcome_broadcast
       end
 
       delegate :user_data, to: Notifications
-
-      def self.call(*args)
-        new(*args).call
-      end
 
       def call
         mascot_account = User.mascot_account
@@ -39,7 +39,7 @@ module Notifications
       attr_reader :receiver_id, :welcome_broadcast
 
       def log_to_datadog
-        DatadogStatsClient.increment(
+        ForemStatsClient.increment(
           "notifications.welcome",
           tags: ["user_id:#{receiver_id}", "title:#{welcome_broadcast.title}"],
         )

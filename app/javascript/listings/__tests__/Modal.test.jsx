@@ -1,7 +1,7 @@
 import { h } from 'preact';
 import { render } from '@testing-library/preact';
 import { axe } from 'jest-axe';
-import Modal from '../components/Modal';
+import { Modal } from '../components/Modal';
 
 import '../../../assets/javascripts/utilities/localDateTime';
 
@@ -63,24 +63,5 @@ describe('<Modal />', () => {
     const { container } = renderModal({ ...getDefaultListing() });
     const results = await axe(container);
     expect(results).toHaveNoViolations();
-  });
-
-  it('should render the MessageModal component when the listing.contact_via_connect is true', () => {
-    const listingWithContactViaConnectTrue = {
-      ...getDefaultListing(),
-      contact_via_connect: true,
-    };
-    const { queryByTestId } = renderModal(listingWithContactViaConnectTrue);
-
-    expect(queryByTestId('listings-message-modal')).toBeDefined();
-  });
-
-  it('should not render the MessageModal when the listing.contact_via_connect is false', () => {
-    const listingWithContactViaConnectFalse = {
-      ...getDefaultListing(),
-      contact_via_connect: false,
-    };
-    const { queryByTestId } = renderModal(listingWithContactViaConnectFalse);
-    expect(queryByTestId('listings-message-modal')).toBeNull();
   });
 });

@@ -2,25 +2,34 @@ import { h } from 'preact';
 import PropTypes from 'prop-types';
 import { useEffect } from 'preact/hooks';
 import { ErrorList } from './ErrorList';
+import { AccessibilitySuggestions } from './AccessibilitySuggestions';
+import { LoadingPreview } from './LoadingPreview';
 
-function titleArea(previewResponse, articleState, errors) {
+function titleArea({
+  previewResponse,
+  articleState,
+  errors,
+  markdownLintErrors,
+}) {
   const tagArray = previewResponse.tags || articleState.tagList.split(', ');
   let tags = '';
   if (tagArray.length > 0 && tagArray[0].length > 0) {
     tags = tagArray.map((tag) => {
       return (
         tag.length > 0 && (
-          <span className="crayons-tag mr-2">
-            <span className="crayons-tag__prefix">#</span>
+          <a href={`/t/${tag}`} className="crayons-tag">
+            <span key={tag} className="crayons-tag__prefix">
+              #
+            </span>
             {tag}
-          </span>
+          </a>
         )
       );
     });
   }
 
   // The v2 editor stores its cover image in articleState.mainImage, while the v1 editor
-  // stores it as previewRespose.cover_image. When previewing, we handle both by
+  // stores it as previewResponse.cover_image. When previewing, we handle both by
   // defaulting to setting the cover image to the mainImage on the article (v2),
   //  and only using the cover image from the previewResponse if it exists (v1).
   let coverImage = articleState.mainImage || '';
@@ -44,18 +53,20 @@ function titleArea(previewResponse, articleState, errors) {
             className="crayons-article__cover__image"
             src={coverImage}
             width="1000"
-            height="420"
             alt="Post preview cover"
           />
         </div>
       )}
       <div className="crayons-article__header__meta">
         {errors && <ErrorList errors={errors} />}
-        <h1 className="fs-3xl s:fs-4xl l:fs-5xl fw-bold s:fw-heavy lh-tight mb-6 spec-article__title">
+        {!errors && markdownLintErrors?.length > 0 && (
+          <AccessibilitySuggestions markdownLintErrors={markdownLintErrors} />
+        )}
+        <h1 className="fs-3xl m:fs-4xl l:fs-5xl fw-bold s:fw-heavy lh-tight mb-2 spec-article__title">
           {previewTitle}
         </h1>
 
-        <div className="spec-article__tags">{tags}</div>
+        <div className="spec-article__tags color-base-60">{tags}</div>
       </div>
     </header>
   );
@@ -68,17 +79,40 @@ const previewResponsePropTypes = PropTypes.shape({
   cover_image: PropTypes.string,
 });
 
-export const Preview = ({ previewResponse, articleState, errors }) => {
+export const Preview = ({
+  previewLoading,
+  previewResponse,
+  articleState,
+  errors,
+  markdownLintErrors,
+}) => {
   useEffect(() => {
-    if (previewResponse.processed_html.includes('twitter-timeline')) {
+    if (previewResponse?.processed_html?.includes('twitter-timeline')) {
       attachTwitterTimelineScript();
     }
   }, [previewResponse]);
 
+  if (previewLoading) {
+    const coverImage = articleState.mainImage;
+    const loadingPreview = (
+      <LoadingPreview version={coverImage === null ? 'default' : 'cover'} />
+    );
+    return (
+      <div className="crayons-article-form__content crayons-card">
+        {loadingPreview}
+      </div>
+    );
+  }
+
   return (
     <div className="crayons-article-form__content crayons-card">
       <article className="crayons-article">
-        {titleArea(previewResponse, articleState, errors)}
+        {titleArea({
+          previewResponse,
+          articleState,
+          errors,
+          markdownLintErrors,
+        })}
         <div className="crayons-article__main">
           <div
             className="crayons-article__body text-styles"
@@ -102,8 +136,10 @@ function attachTwitterTimelineScript() {
 }
 
 Preview.propTypes = {
+  previewLoading: PropTypes.bool,
   previewResponse: previewResponsePropTypes.isRequired,
-  errors: PropTypes.string.isRequired,
+  errors: PropTypes.object,
+  markdownLintErrors: PropTypes.arrayOf(PropTypes.object),
   articleState: PropTypes.shape({
     id: PropTypes.number,
     title: PropTypes.string,

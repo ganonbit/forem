@@ -1,12 +1,12 @@
 require "rails_helper"
 
-RSpec.describe "Podcast Create", type: :request do
+RSpec.describe "Podcast Create" do
   let(:user) { create(:user) }
 
   context "when unauthorized user" do
     it "redirects" do
       get new_podcast_path
-      expect(response).to redirect_to(sign_up_path)
+      expect(response).to redirect_to(new_magic_link_path)
     end
   end
 
@@ -16,7 +16,7 @@ RSpec.describe "Podcast Create", type: :request do
         title: Faker::Hipster.words(number: 2).join(", "),
         description: Faker::Hipster.paragraph(sentence_count: 1),
         twitter_username: "hello-pod",
-        image: fixture_file_upload("files/podcast.png", "image/png"),
+        image: fixture_file_upload("podcast.png", "image/png"),
         slug: "hello-pod",
         main_color_hex: "ffffff",
         website_url: Faker::Internet.url,
@@ -54,13 +54,13 @@ RSpec.describe "Podcast Create", type: :request do
     it "creates a podcast_admin role when created by an owner" do
       post podcasts_path, params: { podcast: valid_attributes, i_am_owner: "1" }
       pod = Podcast.find_by(title: valid_attributes[:title])
-      expect(user.has_role?(:podcast_admin, pod)).to be true
+      expect(user.podcast_admin_for?(pod)).to be true
     end
 
     it "doesn't create a podcast_admin role when not created by an owner" do
       post podcasts_path, params: { podcast: valid_attributes, i_am_owner: "" }
       pod = Podcast.find_by(title: valid_attributes[:title])
-      expect(user.has_role?(:podcast_admin, pod)).to be false
+      expect(user.podcast_admin_for?(pod)).to be false
     end
 
     it "sets the creator" do
@@ -72,37 +72,37 @@ RSpec.describe "Podcast Create", type: :request do
     it "doesn't create with invalid attributes" do
       create(:podcast, slug: valid_attributes[:slug])
       post podcasts_path, params: { podcast: valid_attributes }
-      expect(response.body).to include("Suggest a Podcast")
+      expect(response.body).to include(I18n.t("views.podcasts.suggest_a_podcast"))
     end
 
     it "returns error if image file name is too long" do
-      image = fixture_file_upload("files/podcast.png", "image/png")
+      image = fixture_file_upload("podcast.png", "image/png")
       allow(image).to receive(:original_filename).and_return("#{'a_very_long_filename' * 15}.png")
       valid_attributes[:image] = image
       post podcasts_path, params: { podcast: valid_attributes }
-      expect(response.body).to include("Suggest a Podcast")
+      expect(response.body).to include(I18n.t("views.podcasts.suggest_a_podcast"))
     end
 
     it "returns error if image is not a file" do
       image = "A String"
       valid_attributes[:image] = image
       post podcasts_path, params: { podcast: valid_attributes }
-      expect(response.body).to include("Suggest a Podcast")
+      expect(response.body).to include(I18n.t("views.podcasts.suggest_a_podcast"))
     end
 
     it "returns error if pattern_image file name is too long" do
-      image = fixture_file_upload("files/podcast.png", "image/png")
+      image = fixture_file_upload("podcast.png", "image/png")
       allow(image).to receive(:original_filename).and_return("#{'a_very_long_filename' * 15}.png")
       valid_attributes[:pattern_image] = image
       post podcasts_path, params: { podcast: valid_attributes }
-      expect(response.body).to include("Suggest a Podcast")
+      expect(response.body).to include(I18n.t("views.podcasts.suggest_a_podcast"))
     end
 
     it "returns error if pattern_image is not a file" do
       image = "A String"
       valid_attributes[:pattern_image] = image
       post podcasts_path, params: { podcast: valid_attributes }
-      expect(response.body).to include("Suggest a Podcast")
+      expect(response.body).to include(I18n.t("views.podcasts.suggest_a_podcast"))
     end
   end
 end

@@ -1,93 +1,91 @@
 import { h } from 'preact';
 import PropTypes from 'prop-types';
+import classNames from 'classnames/bind';
+import { FocusTrap } from '../../shared/components/focusTrap';
 import { defaultChildrenPropTypes } from '../../common-prop-types';
-import { Button } from '@crayons';
-
-function getAdditionalClassNames({ size, className }) {
-  let additionalClassNames = '';
-
-  if (size && size.length > 0 && size !== 'default') {
-    additionalClassNames += ` crayons-modal--${size}`;
-  }
-
-  if (className && className.length > 0) {
-    additionalClassNames += ` ${className}`;
-  }
-
-  return additionalClassNames;
-}
-
-const CloseIcon = () => (
-  <svg
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    className="crayons-icon"
-    xmlns="http://www.w3.org/2000/svg"
-    role="img"
-    aria-labelledby="714d29e78a3867c79b07f310e075e824"
-  >
-    <title id="714d29e78a3867c79b07f310e075e824">Close</title>
-    <path d="M12 10.586l4.95-4.95 1.414 1.414-4.95 4.95 4.95 4.95-1.414 1.414-4.95-4.95-4.95 4.95-1.414-1.414 4.95-4.95-4.95-4.95L7.05 5.636l4.95 4.95z" />
-  </svg>
-);
+import { ButtonNew as Button } from '@crayons';
+import CloseIcon from '@images/x.svg';
 
 export const Modal = ({
   children,
-  size = 'default',
+  size,
   className,
   title,
-  overlay,
-  onClose,
+  prompt,
+  sheet,
+  centered,
+  noBackdrop,
+  showHeader = true,
+  sheetAlign = 'center',
+  backdropDismissible = false,
+  allowOverflow = false,
+  onClose = () => {},
+  focusTrapSelector = '.crayons-modal__box',
+  document = window.document,
 }) => {
+  const classes = classNames('crayons-modal', {
+    [`crayons-modal--${size}`]: size && size !== 'medium',
+    [`crayons-modal--${sheetAlign}`]: sheet && sheetAlign !== 'center',
+    'crayons-modal--sheet': sheet,
+    'crayons-modal--prompt': prompt,
+    'crayons-modal--centered': centered && prompt,
+    'crayons-modal--bg-dismissible': !noBackdrop && backdropDismissible,
+    'crayons-modal--overflow-visible': allowOverflow,
+    [className]: className,
+  });
+
   return (
-    <div
-      data-testid="modal-container"
-      className={`crayons-modal${getAdditionalClassNames({
-        size,
-        className,
-      })}`}
+    <FocusTrap
+      onDeactivate={onClose}
+      clickOutsideDeactivates={backdropDismissible}
+      selector={focusTrapSelector}
+      document={document}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="modal"
-        className="crayons-modal__box"
-      >
-        {title.length > 0 && title && (
-          <div className="crayons-modal__box__header">
-            <h2>{title}</h2>
-            <Button
-              icon={CloseIcon}
-              variant="ghost"
-              contentType="icon"
-              aria-label="Close"
-              onClick={onClose}
-            />
-          </div>
+      <div data-testid="modal-container" className={classes}>
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="modal"
+          className="crayons-modal__box"
+        >
+          {showHeader && (
+            <header className="crayons-modal__box__header">
+              <h2 class="crayons-subtitle-2">{title}</h2>
+              <Button
+                icon={CloseIcon}
+                aria-label="Close"
+                className="crayons-modal__dismiss"
+                onClick={onClose}
+              />
+            </header>
+          )}
+          <div className="crayons-modal__box__body">{children}</div>
+        </div>
+        {!noBackdrop && (
+          <div
+            data-testid="modal-overlay"
+            className="crayons-modal__backdrop"
+          />
         )}
-        <div className="crayons-modal__box__body">{children}</div>
       </div>
-      {overlay && (
-        <div data-testid="modal-overlay" className="crayons-modal__overlay" />
-      )}
-    </div>
+    </FocusTrap>
   );
 };
 
 Modal.displayName = 'Modal';
 
-Modal.defaultProps = {
-  className: undefined,
-  overlay: true,
-  onClose: undefined,
-};
-
 Modal.propTypes = {
   children: defaultChildrenPropTypes.isRequired,
   className: PropTypes.string,
   title: PropTypes.string.isRequired,
-  overlay: PropTypes.bool,
+  backdrop: PropTypes.bool,
+  backdropDismissible: PropTypes.bool,
+  prompt: PropTypes.bool,
+  centered: PropTypes.bool,
   onClose: PropTypes.func,
-  size: PropTypes.oneOf(['default', 's', 'm']).isRequired,
+  size: PropTypes.oneOf(['small', 'medium', 'large']),
+  focusTrapSelector: PropTypes.string,
+  sheet: PropTypes.bool,
+  sheetAlign: PropTypes.oneOf(['center', 'left', 'right']),
+  showHeader: PropTypes.bool,
 };

@@ -4,8 +4,8 @@ module UserSubscriptions
   class IsSubscribedCacheChecker
     attr_accessor :user, :source_type, :source_id
 
-    def self.call(*args)
-      new(*args).call
+    def self.call(...)
+      new(...).call
     end
 
     def initialize(user, params)
@@ -16,7 +16,7 @@ module UserSubscriptions
 
     def call
       cache_key = "user-#{user.id}-#{user.updated_at.rfc3339}-#{user.subscribed_to_user_subscriptions_count}/" \
-        "is_subscribed_#{source_type}_#{source_id}"
+                  "is_subscribed_#{source_type}_#{source_id}"
       Rails.cache.fetch(cache_key, expires_in: 24.hours) do
         UserSubscription.where(
           subscriber_id: user.id,

@@ -1,3 +1,5 @@
+/* global showLoginModal */
+
 import { h, Component } from 'preact';
 import PropTypes from 'prop-types';
 import {
@@ -36,39 +38,6 @@ export class CommentSubscription extends Component {
     this.state = initialState;
   }
 
-  componentDidUpdate() {
-    const { showOptions } = this.state;
-
-    if (showOptions) {
-      window.addEventListener('scroll', this.dropdownPlacementHandler);
-      this.dropdownPlacementHandler();
-    } else {
-      window.removeEventListener('scroll', this.dropdownPlacementHandler);
-    }
-  }
-
-  componentWillUnmount() {
-    window.removeEventListener('scroll', this.dropdownPlacementHandler);
-  }
-
-  dropdownPlacementHandler = () => {
-    const { base: element } = this.dropdownElement;
-
-    // Reset the top before doing any calculations
-    element.style.bottom = '';
-
-    const { bottom: dropDownBottom } = element.getBoundingClientRect();
-    const { height } = this.buttonGroupElement.base.getBoundingClientRect();
-
-    if (
-      Math.sign(dropDownBottom) === -1 ||
-      dropDownBottom > window.innerHeight
-    ) {
-      // The 4 pixels is the box shadow from the drop down.
-      element.style.bottom = `${height + 4}px`;
-    }
-  };
-
   commentSubscriptionClick = (event) => {
     this.setState({
       subscriptionType: event.target.value,
@@ -76,11 +45,12 @@ export class CommentSubscription extends Component {
   };
 
   render() {
-    const { showOptions, subscriptionType, subscribed } = this.state;
+    const { subscriptionType, subscribed } = this.state;
     const {
       onSubscribe,
       onUnsubscribe,
       positionType = 'relative',
+      isLoggedIn,
     } = this.props;
 
     const CogIcon = () => (
@@ -100,53 +70,62 @@ export class CommentSubscription extends Component {
     return (
       <div className={positionType}>
         <ButtonGroup
+          labelText="Comment subscription options"
           ref={(element) => {
             this.buttonGroupElement = element;
           }}
         >
           <Button
             variant="outlined"
+            data-tracking-name="comment_subscription_toggle"
             onClick={(_event) => {
-              if (subscribed) {
-                onUnsubscribe(COMMENT_SUBSCRIPTION_TYPE.NOT_SUBSCRIBED);
-                this.setState({
-                  subscriptionType: COMMENT_SUBSCRIPTION_TYPE.ALL,
-                });
-              } else {
-                onSubscribe(subscriptionType);
-              }
+              if (isLoggedIn) {
+                if (subscribed) {
+                  onUnsubscribe(COMMENT_SUBSCRIPTION_TYPE.NOT_SUBSCRIBED);
+                  this.setState({
+                    subscriptionType: COMMENT_SUBSCRIPTION_TYPE.ALL,
+                  });
+                } else {
+                  onSubscribe(subscriptionType);
+                }
 
-              this.setState({ subscribed: !subscribed });
+                this.setState({ subscribed: !subscribed });
+              } else {
+                showLoginModal({
+                  referring_source: 'comments',
+                  trigger: 'comment_subscription',
+                });
+              }
             }}
           >
             {subscribed ? 'Unsubscribe' : 'Subscribe'}
           </Button>
-          {subscribed && (
+          {subscribed ? (
             <Button
+              id="subscription-settings-btn"
               data-testid="subscription-settings"
+              data-tracking-name="comment_subscription_settings"
               variant="outlined"
               icon={CogIcon}
               contentType="icon"
-              onClick={(_event) => {
-                this.setState({ showOptions: !showOptions });
-              }}
             />
-          )}
+          ) : null}
         </ButtonGroup>
         {subscribed && (
           <Dropdown
+            triggerButtonId="subscription-settings-btn"
+            dropdownContentId="subscription-settings-dropdown"
+            dropdownContentCloseButtonId="subscription-settings-done-btn"
+            data-repositioning-dropdown="true"
             data-testid="subscriptions-panel"
-            aria-hidden={!showOptions}
-            className={
-              showOptions
-                ? `inline-block right-4 left-4 s:right-0 s:left-auto${
-                    positionType === 'relative' ? ' w-full' : ''
-                  }`
-                : null
-            }
+            className={`right-0 p-4 s:left-auto${
+              positionType === 'relative' ? ' w-full' : ''
+            }`}
             ref={(element) => {
               this.dropdownElement = element;
             }}
+            onOpen={() => this.setState({ showOptions: true })}
+            onClose={() => this.setState({ showOptions: false })}
           >
             <div className="crayons-fields mb-5">
               <FormField variant="radio">
@@ -209,13 +188,10 @@ export class CommentSubscription extends Component {
             </div>
 
             <Button
+              id="subscription-settings-done-btn"
               className="w-100"
-              onClick={(_event) => {
-                this.setState((prevState) => {
-                  onSubscribe(prevState.subscriptionType);
-
-                  return { ...prevState, showOptions: false };
-                });
+              onClick={() => {
+                onSubscribe(this.state.subscriptionType);
               }}
             >
               Done
@@ -236,4 +212,5 @@ CommentSubscription.propTypes = {
   subscriptionType: PropTypes.oneOf(
     Object.entries(COMMENT_SUBSCRIPTION_TYPE).map(([, value]) => value),
   ).isRequired,
+  isLoggedIn: PropTypes.bool.isRequired,
 };

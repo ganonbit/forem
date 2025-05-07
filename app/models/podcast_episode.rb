@@ -1,11 +1,6 @@
 class PodcastEpisode < ApplicationRecord
-  self.ignored_columns = %w[
-    duration_in_seconds
-  ]
-
-  include Searchable
-  SEARCH_SERIALIZER = Search::PodcastEpisodeSerializer
-  SEARCH_CLASS = Search::FeedContent
+  include PgSearch::Model
+  include AlgoliaSearchable
 
   acts_as_taggable
 
@@ -36,8 +31,9 @@ class PodcastEpisode < ApplicationRecord
   after_destroy :purge, :purge_all
   after_save :bust_cache
 
-  after_commit :index_to_elasticsearch, on: %i[update]
-  after_commit :remove_from_elasticsearch, on: [:destroy]
+  pg_search_scope :search_podcast_episodes,
+                  against: %i[body subtitle title],
+                  using: { tsearch: { prefix: true } }
 
   scope :reachable, -> { where(reachable: true) }
   scope :published, -> { joins(:podcast).where(podcasts: { published: true }) }
@@ -73,6 +69,10 @@ class PodcastEpisode < ApplicationRecord
     ActionView::Base.full_sanitizer.sanitize(processed_html)
   end
 
+  def score
+    1 # When it is expected that a "commentable" has a score, this is the fallback.
+  end
+
   def zero_method
     0
   end
@@ -86,6 +86,10 @@ class PodcastEpisode < ApplicationRecord
 
   def tag_keywords_for_search
     tags.pluck(:keywords_for_search).join
+  end
+
+  def subforem_id
+    nil
   end
 
   ## Useless stubs

@@ -1,15 +1,17 @@
 require "rails_helper"
 
-RSpec.describe "Articles", type: :request do
+RSpec.describe "Articles" do
   let(:user) { create(:user) }
   let(:tag)  { build_stubbed(:tag) }
 
-  describe "GET /feed" do
+  describe "GET /feed(/:username|/:tag_name)" do
     it "returns rss+xml content" do
       create(:article, featured: true)
-      get "/feed"
-      expect(response.status).to eq(200)
-      expect(response.media_type).to eq("application/rss+xml")
+
+      get feed_path
+
+      expect(response).to have_http_status(:ok)
+      expect(response.media_type).to eq("application/xml")
     end
 
     it "contains the full app URL" do
@@ -20,52 +22,55 @@ RSpec.describe "Articles", type: :request do
       expect(response.body).to include("<link>#{URL.url}</link>")
     end
 
-    it "returns not found if no articles" do
-      expect { get "/feed" }.to raise_error(ActiveRecord::RecordNotFound)
-      expect { get "/feed/#{user.username}" }.to raise_error(ActiveRecord::RecordNotFound)
-      expect { get "/feed/#{tag.name}" }.to raise_error(ActiveRecord::RecordNotFound)
+    it "returns not found if no articles", :aggregate_failures do
+      expect { get feed_path }.to raise_error(ActiveRecord::RecordNotFound)
+      expect { get user_feed_path(user.username) }.to raise_error(ActiveRecord::RecordNotFound)
+      expect { get tag_feed_path(tag.name) }.to raise_error(ActiveRecord::RecordNotFound)
+    end
+
+    it "does not contain image tag" do
+      create(:article, featured: true)
+
+      get feed_path
+
+      expect(response.body).not_to include("<image>")
     end
 
     context "with caching headers" do
+      let!(:article) { create(:article, featured: true) }
       before do
-        create(:article, featured: true)
-        get "/feed"
+        get feed_path
       end
 
       it "sets Fastly Cache-Control headers" do
-        expect(response.status).to eq(200)
-
         expected_cache_control_headers = %w[public no-cache]
         expect(response.headers["Cache-Control"].split(", ")).to match_array(expected_cache_control_headers)
       end
 
       it "sets Fastly Surrogate-Control headers" do
-        expect(response.status).to eq(200)
-
         expected_surrogate_control_headers = %w[max-age=600 stale-while-revalidate=30 stale-if-error=86400]
         expect(response.headers["Surrogate-Control"].split(", ")).to match_array(expected_surrogate_control_headers)
       end
 
       it "sets Fastly Surrogate-Key headers" do
-        expect(response.status).to eq(200)
-
-        expected_surrogate_key_headers = %w[feed]
+        expected_surrogate_key_headers = [" articles/#{article.id}"]
         expect(response.headers["Surrogate-Key"].split(", ")).to match_array(expected_surrogate_key_headers)
       end
 
       it "sets Nginx X-Accel-Expires headers" do
-        expect(response.status).to eq(200)
         expect(response.headers["X-Accel-Expires"]).to eq("600")
       end
     end
 
     context "when :username param is not given" do
       let!(:featured_article) { create(:article, featured: true) }
-      let!(:not_featured_article) { create(:article, featured: false) }
+      let!(:not_featured_article) do
+        create(:article, featured: false, score: Settings::UserExperience.home_feed_minimum_score - 1)
+      end
 
-      before { get "/feed" }
+      before { get feed_path }
 
-      it "returns only featured articles" do
+      it "returns only featured articles", :aggregate_failures do
         expect(response.body).to include(featured_article.title)
         expect(response.body).not_to include(not_featured_article.title)
       end
@@ -84,13 +89,20 @@ RSpec.describe "Articles", type: :request do
 
       before { get user_feed_path(user.username) }
 
-      it "returns only articles for that user" do
+      it "returns only articles for that user", :aggregate_failures do
         expect(response.body).to include(user_article.title)
         expect(response.body).not_to include(organization_article.title)
       end
 
-      it "contains the full user URL" do
-        expect(response.body).to include("<link>#{URL.user(user)}</link>")
+      it "contains user's name, link, and composite profile image tag" do
+        expect(response.body).to include(
+          "<image>",
+          "<url>#{app_url(user.profile_image_90)}</url>",
+          "<title>#{community_name}: #{user.name}</title>",
+          "<link>#{URL.user(user)}</link>",
+          "</image>",
+          "<dc:creator>#{user.name}</dc:creator>",
+        )
       end
     end
 
@@ -102,7 +114,7 @@ RSpec.describe "Articles", type: :request do
 
       before { get user_feed_path(organization.slug) }
 
-      it "returns only articles for that organization" do
+      it "returns only articles for that organization", :aggregate_failures do
         expect(response.body).not_to include(user_article.title)
         expect(response.body).to include(organization_article.title)
       end
@@ -110,12 +122,20 @@ RSpec.describe "Articles", type: :request do
       it "contains the full organization URL" do
         expect(response.body).to include("<link>#{URL.organization(organization)}</link>")
       end
+
+      it "contains an organization composite profile image tag", :aggregate_failures do
+        expect(response.body).to include("<image>")
+        expect(response.body).to include("<url>#{app_url(organization.profile_image_90)}</url>")
+        expect(response.body).to include("<title>#{community_name}: #{organization.name}</title>")
+        expect(response.body).to include("<link>#{URL.user(organization)}</link>")
+        expect(response.body).to include("</image>")
+      end
     end
 
     context "when :username param is given but it belongs to neither user nor organization" do
       it "renders empty body" do
         expect do
-          get feed_path("unknown")
+          get user_feed_path("unknown")
         end.to raise_error(ActiveRecord::RecordNotFound)
       end
     end
@@ -133,6 +153,48 @@ RSpec.describe "Articles", type: :request do
 
       rss_feed = Feedjira.parse(response.body)
       expect(rss_feed.entries.first.categories).to match_array(article.tag_list)
+    end
+
+    context "with scored articles" do
+      before do
+        allow(Settings::UserExperience).to receive(:home_feed_minimum_score).and_return(10)
+      end
+
+      it "does not contain non featured articles with a score below Settings::UserExperience.home_feed_minimum_score" do
+        create(:article, featured: false, score: Settings::UserExperience.home_feed_minimum_score - 1)
+
+        expect { get feed_path }.to raise_error(ActiveRecord::RecordNotFound)
+      end
+
+      it "contains non featured articles with a score equal to Settings::UserExperience.home_feed_minimum_score" do
+        create(:article, featured: false, score: Settings::UserExperience.home_feed_minimum_score)
+
+        get feed_path
+
+        expect(response).to have_http_status(:ok)
+      end
+
+      it "contains non featured articles with a score above Settings::UserExperience.home_feed_minimum_score" do
+        create(:article, featured: false, score: Settings::UserExperience.home_feed_minimum_score + 1)
+
+        get feed_path
+
+        expect(response).to have_http_status(:ok)
+      end
+    end
+  end
+
+  describe "GET /feed/latest" do
+    let!(:last_article) { create(:article, featured: true) }
+    let!(:not_featured_article) { create(:article, featured: false) }
+    let!(:article_with_low_score) { create(:article, score: Articles::Feeds::Latest::MINIMUM_SCORE) }
+    let!(:article_with_mid_score) { create(:article, score: Settings::UserExperience.home_feed_minimum_score) }
+
+    before { get "/feed/latest" }
+
+    it "contains latest articles" do
+      expect(response.body).to include(last_article.title, not_featured_article.title, article_with_mid_score.title)
+      expect(response.body).not_to include(article_with_low_score.title)
     end
   end
 
@@ -164,10 +226,16 @@ RSpec.describe "Articles", type: :request do
         expect(rss_feed.entries.first.categories).to include(tag.name)
       end
 
-      it "contains the full app URL" do
+      it "contains the full tag URL" do
         get tag_feed_path(tag.name)
 
-        expect(response.body).to include("<link>#{URL.url}</link>")
+        expect(response.body).to include("<link>#{tag_url(tag)}</link>")
+      end
+
+      it "does not contain image tag" do
+        get tag_feed_path(tag.name)
+
+        expect(response.body).not_to include("<image>")
       end
     end
 
@@ -204,19 +272,19 @@ RSpec.describe "Articles", type: :request do
 
     context "with authorized user with tag param" do
       it "returns a new article" do
-        get "/new", params: { slug: "shecoded" }
+        get "/new", params: { slug: "mytag" }
         expect(response).to have_http_status(:ok)
       end
     end
 
     it "sets canonical url with base" do
       get "/new"
-      expect(response.body).to include('<link rel="canonical" href="http://localhost:3000/new" />')
+      expect(response.body).to include('<link rel="canonical" href="http://forem.test/new" />')
     end
 
-    it "sets canonical url with prefil" do
+    it "sets canonical url with prefill" do
       get "/new?prefill=dsdweewewew"
-      expect(response.body).to include('<link rel="canonical" href="http://localhost:3000/new" />')
+      expect(response.body).to include('<link rel="canonical" href="http://forem.test/new" />')
     end
   end
 
@@ -240,6 +308,16 @@ RSpec.describe "Articles", type: :request do
       expect(response.body).to include("Manage Your Post")
     end
 
+    it "returns unauthorized for a draft" do
+      draft = create(:article, published: false, user: user)
+      expect { get "#{draft.path}/manage" }.to raise_error(Pundit::NotAuthorizedError)
+    end
+
+    it "returns unauthorized for a scheduled article" do
+      scheduled_article = create(:article, published: true, user: user, published_at: 1.day.from_now)
+      expect { get "#{scheduled_article.path}/manage" }.to raise_error(Pundit::NotAuthorizedError)
+    end
+
     it "returns unauthorized if the user is not the author" do
       second_user = create(:user)
       article = create(:article, user: second_user)
@@ -256,30 +334,11 @@ RSpec.describe "Articles", type: :request do
       expect { get "#{article.path}/stats" }.to raise_error(Pundit::NotAuthorizedError)
     end
 
-    it "returns unauthorized if the user is not pro" do
-      article = create(:article, user: user)
-      expect { get "#{article.path}/stats" }.to raise_error(Pundit::NotAuthorizedError)
-    end
-
     it "works successfully" do
-      user.add_role(:pro)
       article = create(:article, user: user)
       get "#{article.path}/stats"
       expect(response).to have_http_status(:ok)
       expect(response.body).to include("Stats for Your Article")
-    end
-  end
-
-  describe "GET /delete_confirm" do
-    before { sign_in user }
-
-    context "without an article" do
-      it "renders not_found" do
-        article = create(:article, user: user)
-        expect do
-          get "#{article.path}_1/delete_confirm"
-        end.to raise_error(ActiveRecord::RecordNotFound)
-      end
     end
   end
 end

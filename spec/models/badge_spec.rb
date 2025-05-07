@@ -1,7 +1,8 @@
 require "rails_helper"
 
-RSpec.describe Badge, type: :model do
+RSpec.describe Badge do
   let(:badge) { create(:badge) }
+  let(:cache_bust) { instance_double(EdgeCache::Bust) }
 
   describe "validations" do
     describe "builtin validations" do
@@ -18,31 +19,15 @@ RSpec.describe Badge, type: :model do
     end
   end
 
-  context "when callbacks are triggered after save" do
-    let!(:badge) { create(:badge) }
-
-    describe "cache busting" do
-      before do
-        allow(CacheBuster).to receive(:bust)
+  describe "class methods" do
+    describe ".id_for_slug" do
+      it "returns the id of an existing slug" do
+        expect(described_class.id_for_slug(badge.slug)).to eq badge.id
       end
 
-      it "calls the cache buster with the path" do
-        badge.save
-
-        expect(CacheBuster).to have_received(:bust).with(badge.path)
+      it "returns nil for non-existing slugs" do
+        expect(described_class.id_for_slug("ohnoes")).to be_nil
       end
-
-      it "calls the cache buster with the internal path" do
-        badge.save
-
-        expect(CacheBuster).to have_received(:bust).with("#{badge.path}?i=i")
-      end
-    end
-  end
-
-  describe "#path" do
-    it "returns the path of the badge" do
-      expect(badge.path).to eq("/badge/#{badge.slug}")
     end
   end
 

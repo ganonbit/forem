@@ -1,6 +1,6 @@
 module Follows
   class SendEmailNotificationWorker
-    include Sidekiq::Worker
+    include Sidekiq::Job
     sidekiq_options queue: :mailers, retry: 10
 
     def perform(follow_id, mailer = NotifyMailer.name)
@@ -9,7 +9,7 @@ module Follows
 
       return if EmailMessage.where(user_id: follow.followable_id)
         .where("sent_at > ?", rand(15..35).hours.ago)
-        .exists?(["subject LIKE ?", "%#{NotifyMailer.subjects[:new_follower_email]}"])
+        .exists?(["subject LIKE ?", "%#{NotifyMailer.new.subjects[:new_follower_email]}"])
 
       mailer.constantize.with(follow: follow).new_follower_email.deliver_now
     end

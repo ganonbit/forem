@@ -22,7 +22,31 @@ RSpec.describe Slack::Messengers::ArticlePublished, type: :service do
     sidekiq_assert_no_enqueued_jobs(only: Slack::Messengers::Worker) do
       article = build(:article).tap do |art|
         art.published = true
-        art.published_at = 1.minute.ago
+        art.published_at = 15.minutes.ago
+      end
+      described_class.call(article: article)
+    end
+  end
+
+  it "does not message slack if DISABLE_SLACK_NOTIFICATIONS is true" do
+    ENV["DISABLE_SLACK_NOTIFICATIONS"] = "true"
+
+    sidekiq_assert_enqueued_jobs(0, only: Slack::Messengers::Worker) do
+      article = build(:article).tap do |art|
+        art.published = true
+        art.published_at = 5.minutes.ago
+      end
+      described_class.call(article: article)
+    end
+
+    ENV["DISABLE_SLACK_NOTIFICATIONS"] = nil
+  end
+
+  it "messages slack for an article that was published a few minutes ago" do
+    sidekiq_assert_enqueued_jobs(1, only: Slack::Messengers::Worker) do
+      article = build(:article).tap do |art|
+        art.published = true
+        art.published_at = 5.minutes.ago
       end
       described_class.call(article: article)
     end
@@ -30,7 +54,7 @@ RSpec.describe Slack::Messengers::ArticlePublished, type: :service do
 
   it "contains the correct info", :aggregate_failures do
     sidekiq_assert_enqueued_jobs(1, only: Slack::Messengers::Worker) do
-      described_class.call(default_params)
+      described_class.call(**default_params)
     end
 
     job = sidekiq_enqueued_jobs(worker: Slack::Messengers::Worker).last
@@ -41,14 +65,18 @@ RSpec.describe Slack::Messengers::ArticlePublished, type: :service do
   end
 
   it "messages the proper channel with the proper username and emoji", :aggregate_failures do
+    channel = "test-channel"
+    # [forem-fix] Remove channel name from Settings::General
+    allow(Settings::General).to receive(:article_published_slack_channel).and_return(channel)
+
     sidekiq_assert_enqueued_jobs(1, only: Slack::Messengers::Worker) do
-      described_class.call(default_params)
+      described_class.call(**default_params)
     end
 
     job = sidekiq_enqueued_jobs(worker: Slack::Messengers::Worker).last
     job_args = job["args"].first
 
-    expect(job_args["channel"]).to eq("activity")
+    expect(job_args["channel"]).to eq(channel)
     expect(job_args["username"]).to eq("article_bot")
     expect(job_args["icon_emoji"]).to eq(":writing_hand:")
   end

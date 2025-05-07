@@ -1,6 +1,5 @@
 import { h, render } from 'preact';
-import { getUserDataAndCsrfToken } from '../chat/util';
-import { getUnopenedChannels } from '../utilities/connect';
+import { getUserDataAndCsrfToken } from '@utilities/getUserDataAndCsrfToken';
 
 HTMLDocument.prototype.ready = new Promise((resolve) => {
   if (document.readyState !== 'loading') {
@@ -15,11 +14,12 @@ function renderPage() {
   const communityConfig = {
     communityName: dataElement.dataset.communityName,
     communityLogo: dataElement.dataset.communityLogo,
-    communityBackground: dataElement.dataset.communityBackground,
+    communityBackgroundColor: dataElement.dataset.communityBackgroundColor,
+    communityBackgroundColor2: dataElement.dataset.communityBackgroundColor2,
     communityDescription: dataElement.dataset.communityDescription,
   };
   import('../onboarding/Onboarding')
-    .then(({ default: Onboarding }) => {
+    .then(({ Onboarding }) => {
       render(
         <Onboarding communityConfig={communityConfig} />,
         document.getElementById('onboarding-container'),
@@ -37,7 +37,6 @@ document.ready.then(
       window.currentUser = currentUser;
       window.csrfToken = csrfToken;
 
-      getUnopenedChannels();
       renderPage();
     })
     .catch((error) => {

@@ -1,4 +1,4 @@
-export default function sendFollowUser(user, successCb) {
+export function sendFollowUser(user, successCb) {
   const csrfToken = document.querySelector("meta[name='csrf-token']").content;
 
   const formData = new FormData();
@@ -20,8 +20,6 @@ export default function sendFollowUser(user, successCb) {
       // json is followed or unfollowed
     })
     .catch((error) => {
-      // TODO: Add client-side error tracking. See https://github.com/thepracticaldev/dev.to/issues/2501
-      // for the discussion.
-      console.log(error); // eslint-disable-line no-console
+      Honeybadger.notify(error);
     });
 }

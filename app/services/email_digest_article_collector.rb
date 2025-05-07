@@ -1,87 +1,122 @@
 class EmailDigestArticleCollector
+  include FieldTest::Helpers
+  include Instrumentation
+
+  ARTICLES_TO_SEND = "EmailDigestArticleCollector#articles_to_send".freeze
+  RESULTS_COUNT = 7 # Winner of digest_count_03_18 field test
+  CLICK_LOOKBACK = 30
+
   def initialize(user)
     @user = user
   end
 
   def articles_to_send
-    return [] unless should_receive_email?
+    # rubocop:disable Metrics/BlockLength
+    order = Arel.sql("((score * ((feed_success_score * 12) + 0.1)) - (clickbait_score * 2)) DESC")
+    instrument ARTICLES_TO_SEND, tags: { user_id: @user.id } do
+      return [] unless should_receive_email?
 
-    articles = if user_has_followings?
-                 experience_level_rating = (@user.experience_level || 5)
-                 experience_level_rating_min = experience_level_rating - 3.6
-                 experience_level_rating_max = experience_level_rating + 3.6
+      articles = if @user.cached_followed_tag_names.any?
+                   experience_level_rating = @user.setting.experience_level || 5
+                   experience_level_rating_min = experience_level_rating - 4
+                   experience_level_rating_max = experience_level_rating + 4
 
-                 @user.followed_articles
-                   .select(:title, :description, :path)
-                   .published
-                   .where("published_at > ?", cutoff_date)
-                   .where(email_digest_eligible: true)
-                   .where.not(user_id: @user.id)
-                   .where("score > ?", 12)
-                   .where("experience_level_rating > ? AND experience_level_rating < ?",
-                          experience_level_rating_min, experience_level_rating_max)
-                   .order(score: :desc)
-                   .limit(6)
-               else
-                 Article.select(:title, :description, :path)
-                   .published
-                   .where("published_at > ?", cutoff_date)
-                   .where(featured: true, email_digest_eligible: true)
-                   .where.not(user_id: @user.id)
-                   .where("score > ?", 25)
-                   .order(score: :desc)
-                   .limit(6)
-               end
+                   @user.followed_articles
+                     .select(:title, :description, :path, :cached_user, :cached_tag_list)
+                     .published.from_subforem
+                     .where("published_at > ?", cutoff_date)
+                     .where(email_digest_eligible: true)
+                     .not_authored_by(@user.id)
+                     .where("score > ?", 8)
+                     .where("experience_level_rating > ? AND experience_level_rating < ?",
+                            experience_level_rating_min, experience_level_rating_max)
+                     .order(order)
+                     .limit(RESULTS_COUNT)
+                 else
+                   tags = @user.cached_followed_tag_names_or_recent_tags
+                   Article.select(:title, :description, :path, :cached_user, :cached_tag_list)
+                     .published.from_subforem
+                     .where("published_at > ?", cutoff_date)
+                     .where(email_digest_eligible: true)
+                     .not_authored_by(@user.id)
+                     .where("score > ?", 11)
+                     .order(order)
+                     .limit(RESULTS_COUNT)
+                     .merge(Article.featured.or(Article.cached_tagged_with_any(tags)))
+                 end
 
-    articles.length < 3 ? [] : articles
+      # Fallback if there are not enough articles
+      if articles.length < 3
+        articles = Article.select(:title, :description, :path, :cached_user, :cached_tag_list)
+          .published.from_subforem
+          .where("published_at > ?", cutoff_date)
+          .where(email_digest_eligible: true)
+          .where("score > ?", 11)
+          .not_authored_by(@user.id)
+          .order(order)
+          .limit(RESULTS_COUNT)
+        if @user.cached_antifollowed_tag_names.any?
+          articles = articles.not_cached_tagged_with_any(@user.cached_antifollowed_tag_names)
+        end
+      end
+
+      # Pop second article to front if the first article is the same as the last email
+      if articles.any? && last_email_includes_title_in_subject?(articles.first.title)
+        articles = articles[1..] + [articles.first]
+      end
+
+      articles.length < 3 ? [] : articles
+    end
+    # rubocop:enable Metrics/BlockLength
+  end
+
+  def should_receive_email?
+    return true unless last_email_sent
+    return false if last_email_sent > 18.hours.ago
+    return true if last_email_clicked?
+
+    email_sent_within_lookback_period = last_email_sent >= Settings::General.periodic_email_digest.days.ago
+    return false if email_sent_within_lookback_period && !recent_tracked_click?
+
+    true
   end
 
   private
 
-  def should_receive_email?
-    return true unless last_email_sent_at
-
-    # Has it been at least x days since @user received an email?
-    Time.current - last_email_sent_at >= days_until_next_email
+  def recent_tracked_click?
+    @user.email_messages
+      .where(mailer: "DigestMailer#digest_email")
+      .where("sent_at > ?", CLICK_LOOKBACK.days.ago)
+      .where.not(clicked_at: nil).any?
   end
 
-  def days_until_next_email
-    # Relies on hyperbolic tangent function to model the frequency of the digest email
-    max_day = SiteConfig.periodic_email_digest_max
-    min_day = SiteConfig.periodic_email_digest_min
-    result = max_day * (1 - Math.tanh(2 * open_rate))
-    result = result.round
-
-    [result, min_day].max
+  def last_email_clicked?
+    @user.email_messages.where(mailer: "DigestMailer#digest_email").last&.clicked_at.present?
   end
 
-  def open_rate
-    email_count = last_user_emails.count
-
-    # Will stick with 50% open rate if @user has no/not-enough email digest history
-    return 0.5 if email_count < 10
-
-    past_opened_emails_count = last_user_emails.count { |msg| msg.opened_at.present? }
-    past_opened_emails_count / email_count
+  def last_email_sent
+    @last_email_sent ||=
+      @user.email_messages
+        .where(mailer: "DigestMailer#digest_email")
+        .maximum(:sent_at)
   end
 
-  def last_email_sent_at
-    last_user_emails.last&.sent_at
+  def last_email_includes_title_in_subject?(title)
+    @user.email_messages
+      .where(mailer: "DigestMailer#digest_email")
+      .last&.subject&.include?(title)
   end
 
   def cutoff_date
-    a_few_days_ago = 4.days.ago.utc
-    return a_few_days_ago unless last_email_sent_at
+    a_few_days_ago = 7.days.ago.utc
+    return a_few_days_ago unless last_email_sent
 
-    [a_few_days_ago, last_email_sent_at].max
+    [a_few_days_ago, (last_email_sent - 18.hours)].max
   end
 
   def user_has_followings?
-    @user.following_users_count.positive? || @user.cached_followed_tag_names.any?
-  end
-
-  def last_user_emails
-    @last_user_emails ||= @user.email_messages.select(:sent_at,
-                                                      :opened_at).where(mailer: "DigestMailer#digest_email").limit(10)
+    @user.following_users_count.positive? ||
+      @user.cached_followed_tag_names.any? ||
+      @user.cached_antifollowed_tag_names.any?
   end
 end

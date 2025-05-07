@@ -1,9 +1,9 @@
 require "rails_helper"
 
 RSpec.describe UserTag, type: :liquid_tag do
-  let(:user)  { create(:user) }
+  let(:user) { create(:user) }
 
-  setup       { Liquid::Template.register_tag("user", described_class) }
+  before { Liquid::Template.register_tag("user", described_class) }
 
   def generate_user_tag(id_code)
     Liquid::Template.parse("{% user #{id_code} %}")
@@ -19,13 +19,19 @@ RSpec.describe UserTag, type: :liquid_tag do
       liquid = generate_user_tag(user.username)
       expect(liquid.render).to include("<img")
     end
+
+    it "renders the proper follow button for a user" do
+      liquid = generate_user_tag(user.username)
+      expect(liquid.render).to include("follow-user")
+    end
   end
 
   context "when given an invalid username" do
     it "renders a missing username and name", aggregate_failures: true do
       liquid = generate_user_tag("nonexistent user")
+
       expect(liquid.render).to include("[deleted user]")
-      expect(liquid.render).to include("[Deleted User]")
+        .and include("[Deleted User]")
     end
   end
 end

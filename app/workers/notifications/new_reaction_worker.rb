@@ -1,6 +1,6 @@
 module Notifications
   class NewReactionWorker
-    include Sidekiq::Worker
+    include Sidekiq::Job
 
     sidekiq_options queue: :medium_priority, retry: 10
 
@@ -20,7 +20,7 @@ module Notifications
       return false unless receiver
       return true if receiver_klass == "Organization"
 
-      receiver.reaction_notifications
+      receiver.notification_setting.reaction_notifications
     end
   end
 end

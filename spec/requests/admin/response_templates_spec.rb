@@ -1,21 +1,21 @@
 require "rails_helper"
 
-RSpec.describe "/admin/response_templates", type: :request do
+RSpec.describe "/admin/advanced/response_templates" do
   let(:admin) { create(:user, :admin) }
 
   before { sign_in admin }
 
-  describe "GET /admin/response_templates" do
+  describe "GET /admin/advanced/response_templates" do
     it "renders with status 200" do
       get admin_response_templates_path
-      expect(response.status).to eq 200
+      expect(response).to have_http_status :ok
     end
 
     context "when there are response templates to render" do
       it "renders with status 200" do
         create(:response_template)
         get admin_response_templates_path
-        expect(response.status).to eq 200
+        expect(response).to have_http_status :ok
       end
     end
 
@@ -25,19 +25,19 @@ RSpec.describe "/admin/response_templates", type: :request do
       it "renders with status 200" do
         sign_in single_resource_admin
         get admin_response_templates_path
-        expect(response.status).to eq 200
+        expect(response).to have_http_status :ok
       end
     end
   end
 
-  describe "GET /admin/response_templates/new" do
+  describe "GET /admin/advanced/response_templates/new" do
     it "renders with status 200" do
       get admin_response_templates_path
-      expect(response.status).to eq 200
+      expect(response).to have_http_status :ok
     end
   end
 
-  describe "POST /admin/response_templates" do
+  describe "POST /admin/advanced/response_templates" do
     it "successfully creates a response template" do
       post admin_response_templates_path, params: {
         response_template: {
@@ -59,11 +59,11 @@ RSpec.describe "/admin/response_templates", type: :request do
           title: "something"
         }
       }
-      expect(response.body).to include(ResponseTemplate::COMMENT_VALIDATION_MSG)
+      expect(response.body).to include(I18n.t("models.response_template.comment_markdown"))
     end
   end
 
-  describe "GET /admin/response_templates/:id/edit" do
+  describe "GET /admin/advanced/response_templates/:id/edit" do
     let(:response_template) { create(:response_template) }
 
     it "renders successfully if a valid response template was found" do
@@ -83,7 +83,7 @@ RSpec.describe "/admin/response_templates", type: :request do
     end
   end
 
-  describe "PATCH /admin/response_templates/:id" do
+  describe "PATCH /admin/advanced/response_templates/:id" do
     it "successfully updates with a valid request" do
       response_template = create(:response_template)
       new_title = generate(:title)
@@ -102,11 +102,11 @@ RSpec.describe "/admin/response_templates", type: :request do
           content_type: "html"
         }
       }
-      expect(response.body).to include(ResponseTemplate::COMMENT_VALIDATION_MSG)
+      expect(response.body).to include(I18n.t("models.response_template.comment_markdown"))
     end
   end
 
-  describe "DELETE /admin/response_templates/:id" do
+  describe "DELETE /admin/advanced/response_templates/:id" do
     it "successfully deletes the response template" do
       response_template = create(:response_template)
       delete admin_response_template_path(response_template.id)

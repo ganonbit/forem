@@ -1,46 +1,56 @@
 class CommentPolicy < ApplicationPolicy
   def edit?
-    user_is_author?
-  end
+    return false if user.spam_or_suspended?
 
-  def create?
-    !user_is_banned? && !user_is_comment_banned? && !user_is_blocked?
-  end
-
-  def update?
-    edit?
+    user_author?
   end
 
   def destroy?
-    edit?
+    user_author?
   end
 
-  def delete_confirm?
-    edit?
+  def create?
+    !user.spam_or_suspended? && !user.comment_suspended?
   end
 
-  def settings?
-    edit?
-  end
+  alias new? create?
+
+  alias update? edit?
+
+  alias delete_confirm? destroy?
+
+  alias settings? edit?
 
   def preview?
     true
   end
 
+  def subscribe?
+    true
+  end
+
+  def unsubscribe?
+    true
+  end
+
+  def moderate?
+    return true if user.trusted?
+
+    moderator_create?
+  end
+
   def moderator_create?
-    !user_is_blocked? && (user_is_moderator? || minimal_admin?)
+    Authorizer.for(user: user).accesses_mod_response_templates?
   end
 
   def hide?
-    user_is_commentable_author?
+    user_commentable_author? && !record.by_staff_account?
   end
 
-  def unhide?
-    user_is_commentable_author?
-  end
+  alias unhide? hide?
 
   def admin_delete?
-    minimal_admin?
+    user_any_admin?
   end
 
   def permitted_attributes_for_update
@@ -49,6 +59,14 @@ class CommentPolicy < ApplicationPolicy
 
   def permitted_attributes_for_preview
     %i[body_markdown]
+  end
+
+  def permitted_attributes_for_subscribe
+    %i[subscription_id comment_id article_id]
+  end
+
+  def permitted_attributes_for_unsubscribe
+    %i[subscription_id]
   end
 
   def permitted_attributes_for_create
@@ -61,25 +79,15 @@ class CommentPolicy < ApplicationPolicy
 
   private
 
-  def user_is_moderator?
+  def user_moderator?
     user.moderator_for_tags.present?
   end
 
-  def user_is_comment_banned?
-    user.has_role? :comment_banned
-  end
-
-  def user_is_author?
+  def user_author?
     record.user_id == user.id
   end
 
-  def user_is_blocked?
-    return false if user.blocked_by_count.zero?
-
-    UserBlock.blocking?(record.commentable.user_id, user.id)
-  end
-
-  def user_is_commentable_author?
+  def user_commentable_author?
     record.commentable.present? && record.commentable.user_id == user.id
   end
 end

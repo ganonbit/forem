@@ -1,32 +1,76 @@
 @import '../config/import';
 
 .crayons-tag {
-  font-size: var(--fs-s);
+  background: transparent;
   color: var(--tag-color);
-  line-height: 1.3;
   border-radius: var(--radius);
-  padding: var(--su-1);
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  flex-wrap: nowrap;
+  transition: all var(--transition-props);
+  padding: clamp(var(--su-1), 0.25em, 0.5em) 0.5em;
 
   &__prefix {
-    opacity: 0.4;
-    font-weight: normal;
+    color: var(--tag-prefix);
+    transition: all var(--transition-props);
+    flex-shrink: 0;
   }
 
-  &[href]:hover {
+  &--filled {
+    background: var(--tag-bg);
     color: var(--tag-color-hover);
   }
 
-  &--l {
-    font-size: var(--fs-l);
+  &--monochrome {
+    .crayons-tag__prefix {
+      color: var(--tag-prefix);
+    }
   }
 
-  &--xl {
-    font-size: var(--fs-xl);
+  &:hover,
+  &:focus {
+    background: var(--tag-bg-hover);
+    color: var(--tag-color-hover);
+    box-shadow: inset 0 0 0 1px var(--tag-bg-hover),
+      inset 0 0 0 1px var(--tag-bg-hover), inset 0 0 0 1px var(--tag-bg-hover);
+
+    .crayons-tag__prefix {
+      color: var(--tag-prefix-hover);
+    }
+  }
+}
+
+.tag-card {
+  height: 195px;
+
+  .crayons-tag {
+    padding-top: 0;
+    padding-bottom: 0;
   }
 
-  &--2xl {
-    font-size: var(--fs-2xl);
-    padding: var(--su-1) var(--su-2);
+  &__badge {
+    width: 48px;
+    height: 48px;
+  }
+}
+
+@media (max-width: $breakpoint-s) {
+  .tags-index {
+    .crayons-page-header {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .tags-interaction-container {
+      justify-content: space-between;
+      width: 100%;
+      grid-gap: 4px;
+    }
+
+    .tags-interaction-container__buttons > :first-child {
+      padding-left: 0;
+    }
   }
 }

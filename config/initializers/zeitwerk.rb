@@ -14,3 +14,5 @@ end
 Rails.autoloaders.main.ignore(Rails.root.join("lib/data_update_scripts"))
 Rails.autoloaders.main.ignore(Rails.root.join("lib/generators/data_update"))
 Rails.autoloaders.main.ignore(Rails.root.join("lib/generators/service"))
+Rails.autoloaders.main.ignore(Rails.root.join("lib/generators/settings_model"))
+Rails.autoloaders.main.ignore(Rails.root.join("lib/cypress-rails"))

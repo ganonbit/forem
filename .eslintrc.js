@@ -9,11 +9,27 @@ module.exports = {
     Atomics: 'readonly',
     SharedArrayBuffer: 'readonly',
   },
+  parser: '@babel/eslint-parser',
   parserOptions: {
     ecmaVersion: 2018,
     sourceType: 'module',
   },
   rules: {
     'no-console': ['error', { allow: ['error'] }],
+    'no-restricted-syntax': [
+      'error',
+      {
+        selector: 'ExportDefaultDeclaration',
+        message: 'Prefer named exports',
+      },
+    ],
   },
+  overrides: [
+    {
+      files: ['**/*.stories.jsx', 'app/javascript/admin/controllers/*.js'],
+      rules: {
+        'no-restricted-syntax': 'off',
+      },
+    },
+  ],
 };

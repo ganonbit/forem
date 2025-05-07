@@ -1,10 +1,10 @@
 import PropTypes from 'prop-types';
 import { h, Fragment } from 'preact';
-import DateTime from '../../shared/components/dateTime';
-import ListingDate from './rowElements/listingDate';
-import Tags from './rowElements/tags';
-import Location from './rowElements/location';
-import ActionButtons from './rowElements/actionButtons';
+import { DateTime } from '../../shared/components/dateTime';
+import { ListingDate } from './rowElements/listingDate';
+import { Tags } from './rowElements/tags';
+import { Location } from './rowElements/location';
+import { ActionButtons } from './rowElements/actionButtons';
 
 export const ListingRow = ({ listing }) => {
   const bumpedAt = listing.bumped_at ? listing.bumped_at.toString() : null;
@@ -25,6 +25,7 @@ export const ListingRow = ({ listing }) => {
         isExpired ? 'expired' : ''
       }`}
       data-listing-id={listing.id}
+      data-testid={listing.id}
     >
       {listing.organization_id && (
         <span className="listing-org">{listing.author.name}</span>

@@ -1,7 +1,7 @@
 import { h } from 'preact';
 import PropTypes from 'prop-types';
 
-const BodyMarkdown = ({ onChange, defaultValue }) => (
+export const BodyMarkdown = ({ onChange, defaultValue }) => (
   <div className="crayons-field">
     <label className="crayons-field__label" htmlFor="body_markdown">
       Body Markdown
@@ -17,7 +17,7 @@ const BodyMarkdown = ({ onChange, defaultValue }) => (
     />
     <p className="crayons-field__description">
       400 characters max, 12 line break max, no images allowed, *markdown is
-      encouraged*
+      encouraged*. Please include a contact method if necessary.
     </p>
   </div>
 );
@@ -26,5 +26,3 @@ BodyMarkdown.propTypes = {
   onChange: PropTypes.func.isRequired,
   defaultValue: PropTypes.string.isRequired,
 };
-
-export default BodyMarkdown;

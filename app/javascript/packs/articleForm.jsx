@@ -1,7 +1,8 @@
 import { h, render } from 'preact';
-import { getUserDataAndCsrfToken } from '../chat/util';
-import ArticleForm from '../article-form/articleForm';
+import { ArticleForm } from '../article-form/articleForm';
 import { Snackbar } from '../Snackbar';
+import { createRootFragment } from '../shared/preact/preact-root-fragment';
+import { getUserDataAndCsrfToken } from '@utilities/getUserDataAndCsrfToken';
 
 HTMLDocument.prototype.ready = new Promise((resolve) => {
   if (document.readyState !== 'loading') {
@@ -16,25 +17,27 @@ function loadForm() {
   const snackZone = document.getElementById('snack-zone');
 
   if (snackZone) {
-    render(<Snackbar lifespan="3" />, snackZone);
+    render(<Snackbar lifespan={3} />, snackZone);
   }
 
   getUserDataAndCsrfToken().then(({ currentUser, csrfToken }) => {
     window.currentUser = currentUser;
     window.csrfToken = csrfToken;
 
-    const root = document.getElementById('js-article-form');
-    const { article, organizations, version, siteLogo } = root.dataset;
-
+    const root = document.querySelector('main');
+    const { article, organizations, version, siteLogo, schedulingEnabled, coverImageHeight, coverImageCrop } =
+      root.dataset;
     render(
       <ArticleForm
         article={article}
         organizations={organizations}
         version={version}
         siteLogo={siteLogo}
+        coverImageHeight={coverImageHeight}
+        coverImageCrop={coverImageCrop}
+        schedulingEnabled={schedulingEnabled == 'true'}
       />,
-      root,
-      root.firstElementChild,
+      createRootFragment(root, root.firstElementChild),
     );
   });
 }

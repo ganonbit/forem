@@ -2,7 +2,9 @@ class TwitterTimelineTag < LiquidTagBase
   include ActionView::Helpers::AssetTagHelper
   PARTIAL = "liquids/twitter_timeline".freeze
 
-  URL_REGEXP = %r{\Ahttps://twitter\.com/[a-zA-Z0-9]+/timelines/\d+\Z}.freeze
+  URL_REGEXP = %r{\Ahttps://twitter\.com/[a-zA-Z0-9]+/timelines/\d+\Z}
+
+  REGISTRY_REGEXP = %r{https://twitter\.com/[a-zA-Z0-9]+/timelines/\d+}
 
   SCRIPT = <<~JAVASCRIPT.freeze
     <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
@@ -39,8 +41,10 @@ class TwitterTimelineTag < LiquidTagBase
   end
 
   def raise_error
-    raise StandardError, "Invalid Twitter Timeline URL"
+    raise StandardError, I18n.t("liquid_tags.twitter_timeline_tag.invalid_url")
   end
 end
 
 Liquid::Template.register_tag("twitter_timeline", TwitterTimelineTag)
+
+UnifiedEmbed.register(TwitterTimelineTag, regexp: TwitterTimelineTag::REGISTRY_REGEXP)

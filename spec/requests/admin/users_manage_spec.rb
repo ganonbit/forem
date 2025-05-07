@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "Admin::Users", type: :request do
+RSpec.describe "Admin::Users" do
   let!(:user) { create(:user, twitter_username: nil, old_username: "username") }
   let!(:user2) { create(:user, twitter_username: "Twitter") }
   let(:user3) { create(:user) }
@@ -49,7 +49,6 @@ RSpec.describe "Admin::Users", type: :request do
       badge_id: badge.id,
       rewarding_context_message_markdown: "message",
     )
-    ChatChannels::CreateWithUsers.call(users: [user2, user3], channel_type: "direct")
     user2.follow(user3)
     user.follow(super_admin)
     user3.follow(user2)
@@ -68,7 +67,7 @@ RSpec.describe "Admin::Users", type: :request do
     end
 
     it "deletes duplicate user" do
-      post "/admin/users/#{user.id}/merge", params: { user: { merge_user_id: user2.id } }
+      post merge_admin_user_path(user.id), params: { user: { merge_user_id: user2.id } }
 
       expect { User.find(user2.id) }.to raise_exception(ActiveRecord::RecordNotFound)
     end
@@ -78,7 +77,7 @@ RSpec.describe "Admin::Users", type: :request do
       expected_comments_count = user.comments.count + user2.comments.count
       expected_reactions_count = user.reactions.count + user2.reactions.count
 
-      post "/admin/users/#{user.id}/merge", params: { user: { merge_user_id: user2.id } }
+      post merge_admin_user_path(user.id), params: { user: { merge_user_id: user2.id } }
 
       expect(user.comments.count).to eq(expected_articles_count)
       expect(user.articles.count).to eq(expected_comments_count)
@@ -87,60 +86,77 @@ RSpec.describe "Admin::Users", type: :request do
 
     it "merges all relationships" do
       expected_follows_count = user.follows.count + user2.follows.count
-      expected_channel_memberships_count = user.chat_channel_memberships.count + user2.chat_channel_memberships.count
       expected_mentions_count = user.mentions.count + user2.mentions.count
 
-      post "/admin/users/#{user.id}/merge", params: { user: { merge_user_id: user2.id } }
+      post merge_admin_user_path(user.id), params: { user: { merge_user_id: user2.id } }
 
       expect(user.follows.count).to eq(expected_follows_count)
       expect(Follow.followable_user(user.id).count).to eq(1)
-      expect(user.chat_channel_memberships.count).to eq(expected_channel_memberships_count)
       expect(user.mentions.count).to eq(expected_mentions_count)
     end
 
     it "merges misc profile info" do
-      post "/admin/users/#{user.id}/merge", params: { user: { merge_user_id: user2.id } }
+      post merge_admin_user_path(user.id), params: { user: { merge_user_id: user2.id } }
 
       expect(user.github_repos.any?).to be true
       expect(user.badge_achievements.any?).to be true
     end
 
     it "merges social identities and usernames" do
-      post "/admin/users/#{user.id}/merge", params: { user: { merge_user_id: user2.id } }
+      post merge_admin_user_path(user.id), params: { user: { merge_user_id: user2.id } }
 
       expect(user.reload.twitter_username).to eq("Twitter")
+    end
+
+    it "merges an identity on a single account into the other" do
+      omniauth_mock_twitter_payload
+      omniauth_mock_github_payload
+      create(:identity, user: user, provider: "twitter")
+      deleted_user_identity = create(:identity, user: user2)
+
+      post merge_admin_user_path(user.id), params: { user: { merge_user_id: user2.id } }
+
+      expect(user.identities.count).to eq 2
+      expect(user.identity_ids).to include deleted_user_identity.id
     end
   end
 
   context "when managing activity and roles" do
     it "adds comment suspend role" do
-      params = { user: { user_status: "Comment Suspend", note_for_current_role: "comment suspend this user" } }
-      patch "/admin/users/#{user.id}/user_status", params: params
+      params = { user: { user_status: "Comment Suspended", note_for_current_role: "comment suspend this user" } }
+      patch user_status_admin_user_path(user.id), params: params
 
-      expect(user.roles.first.name).to eq("comment_banned")
+      expect(user.roles.first.name).to eq("comment_suspended")
       expect(Note.first.content).to eq("comment suspend this user")
     end
 
-    it "selects new role for user" do
-      user.add_role :trusted
-      user.reload
+    it "adds limited role" do
+      params = { user: { user_status: "Limited", note_for_current_role: "limited role added" } }
+      patch user_status_admin_user_path(user.id), params: params
 
-      params = { user: { user_status: "Comment Suspend", note_for_current_role: "comment suspend this user" } }
-      patch "/admin/users/#{user.id}/user_status", params: params
-
-      expect(user.roles.count).to eq(1)
-      expect(user.roles.last.name).to eq("comment_banned")
+      expect(user.roles.first.name).to eq("limited")
+      expect(Note.first.content).to eq("limited role added")
     end
 
-    it "selects super admin role when user was banned" do
-      user.add_role :banned
+    it "selects new role for user" do
+      user.add_role(:trusted)
+      user.reload
+
+      params = { user: { user_status: "Comment Suspended", note_for_current_role: "comment suspend this user" } }
+      patch user_status_admin_user_path(user.id), params: params
+
+      expect(user.roles.count).to eq(1)
+      expect(user.roles.last.name).to eq("comment_suspended")
+    end
+
+    it "selects super admin role when user was suspended" do
+      user.add_role(:suspended)
       user.reload
 
       params = { user: { user_status: "Super Admin", note_for_current_role: "they deserve it for some reason" } }
-      patch "/admin/users/#{user.id}/user_status", params: params
+      patch user_status_admin_user_path(user.id), params: params
 
-      expect(user.roles.count).to eq(1)
-      expect(user.roles.last.name).to eq("super_admin")
+      expect(user.super_admin?).to be(true)
     end
 
     it "does not allow non-super-admin to doll out admin" do
@@ -149,20 +165,90 @@ RSpec.describe "Admin::Users", type: :request do
       super_admin.reload
 
       params = { user: { user_status: "Super Admin", note_for_current_role: "they deserve it for some reason" } }
-      patch "/admin/users/#{user.id}/user_status", params: params
+      patch user_status_admin_user_path(user.id), params: params
 
-      expect(user.has_role?(:super_admin)).not_to be false
+      expect(user.super_admin?).not_to be false
     end
 
     it "creates a general note on the user" do
-      put "/admin/users/#{user.id}", params: { user: { new_note: "general note about whatever" } }
+      put admin_user_path(user.id), params: { user: { new_note: "general note about whatever" } }
       expect(Note.last.content).to eq("general note about whatever")
     end
 
     it "remove credits from account" do
       create_list(:credit, 5, user: user)
-      put "/admin/users/#{user.id}", params: { user: { remove_credits: "3" } }
+      put admin_user_path(user.id), params: { user: { remove_credits: "3" } }
       expect(user.credits.size).to eq(2)
+    end
+
+    it "removes non-admin roles from non-super_admin users", :aggregate_failures do
+      role = user.add_role(:trusted)
+
+      expect do
+        delete admin_user_path(user.id), params: { user_id: user.id, role_id: role.id }
+      end.to change(user.roles, :count).by(-1)
+
+      expect(user.has_trusted_role?).to be false
+      expect(request.flash["success"]).to include("successfully removed from the user!")
+    end
+
+    it "removes the correct resource_admin_role from non-super_admin users", :aggregate_failures do
+      role = user.add_role(:single_resource_admin, Comment)
+      user.add_role(:single_resource_admin, Broadcast)
+
+      expect do
+        delete admin_user_path(user.id),
+               params: { user_id: user.id, role_id: role.id, resource_type: Comment }
+      end.to change(user.roles, :count).by(-1)
+
+      expect(user.single_resource_admin_for?(Comment)).to be false
+      expect(user.single_resource_admin_for?(Broadcast)).to be true
+      expect(request.flash["success"]).to include("successfully removed from the user!")
+    end
+
+    it "removes tag mod role (resource_type and resource_id passed)" do
+      tag = create(:tag)
+      role = user.add_role(:tag_moderator, tag)
+
+      expect do
+        delete admin_user_path(user.id),
+               params: { user_id: user.id, role_id: role.id, resource_type: "Tag", resource_id: tag.id }
+      end.to change(user.roles, :count).by(-1)
+    end
+
+    it "doesn't remove other tag mod role" do
+      tag = create(:tag)
+      tag2 = create(:tag)
+      role = user.add_role(:tag_moderator, tag)
+      role = user.add_role(:tag_moderator, tag2)
+
+      expect do
+        delete admin_user_path(user.id),
+               params: { user_id: user.id, role_id: role.id, resource_type: "Tag", resource_id: tag.id }
+      end.to change(user.roles, :count).by(-1)
+
+      user.reload
+      expect(user.tag_moderator?(tag: tag2)).to be true
+    end
+  end
+
+  context "when adding tag moderator role" do
+    let(:tag) { create(:tag, name: "ruby") }
+
+    it "adds role", :aggregate_failures do
+      params = { user: { tag_name: tag.name } }
+      post add_tag_mod_role_admin_user_path(user.id), params: params
+      user.reload
+      expect(user.tag_moderator?(tag: tag)).to be true
+      expect(response).to redirect_to(admin_user_path(user.id))
+    end
+
+    it "displays tag not found message", :aggregate_failures do
+      tag_name = "su#{tag.name}per"
+      params = { user: { tag_name: tag_name } }
+      post add_tag_mod_role_admin_user_path(user.id), params: params
+      expect(flash[:error]).to include("Error: Tag \"#{tag_name}\" was not found")
+      expect(response).to redirect_to(admin_user_path(user.id))
     end
   end
 
@@ -193,13 +279,13 @@ RSpec.describe "Admin::Users", type: :request do
 
     it "raises a 'record not found' error after deletion" do
       sidekiq_perform_enqueued_jobs do
-        post "/admin/users/#{user.id}/full_delete"
+        post full_delete_admin_user_path(user.id)
       end
       expect { User.find(user.id) }.to raise_exception(ActiveRecord::RecordNotFound)
     end
 
     it "expect flash message" do
-      post "/admin/users/#{user.id}/full_delete"
+      post full_delete_admin_user_path(user.id)
       expect(request.flash["success"]).to include("fully deleted")
     end
   end
@@ -210,7 +296,7 @@ RSpec.describe "Admin::Users", type: :request do
     end
 
     it "adds the proper amount of credits for organizations" do
-      put "/admin/users/#{super_admin.id}", params: {
+      put admin_user_path(super_admin.id), params: {
         user: {
           add_org_credits: 5,
           organization_id: organization.id
@@ -222,7 +308,7 @@ RSpec.describe "Admin::Users", type: :request do
 
     it "removes the proper amount of credits for organizations" do
       Credit.add_to(organization, 10)
-      put "/admin/users/#{super_admin.id}", params: {
+      put admin_user_path(super_admin.id), params: {
         user: {
           remove_org_credits: 5,
           organization_id: organization.id
@@ -233,7 +319,7 @@ RSpec.describe "Admin::Users", type: :request do
     end
 
     it "add the proper amount of credits to a user" do
-      put "/admin/users/#{super_admin.id}", params: {
+      put admin_user_path(super_admin.id), params: {
         user: {
           add_credits: 5
         }
@@ -244,7 +330,7 @@ RSpec.describe "Admin::Users", type: :request do
 
     it "removes the proper amount of credits from a user" do
       Credit.add_to(super_admin, 10)
-      put "/admin/users/#{super_admin.id}", params: {
+      put admin_user_path(super_admin.id), params: {
         user: {
           remove_credits: 5
         }
@@ -253,4 +339,5 @@ RSpec.describe "Admin::Users", type: :request do
       expect(super_admin.reload.unspent_credits_count).to eq 5
     end
   end
+  # rubocop:enable RSpec/IndexedLet
 end

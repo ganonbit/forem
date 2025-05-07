@@ -1,28 +1,25 @@
 require "rails_helper"
 
-RSpec.describe Tag, type: :model do
+RSpec.describe Tag do
   let(:tag) { build(:tag) }
+
+  describe "#class_name" do
+    subject(:class_name) { tag.class_name }
+
+    it { is_expected.to eq("Tag") }
+  end
 
   describe "validations" do
     describe "builtin validations" do
       subject { tag }
 
       it { is_expected.to belong_to(:badge).optional }
-      it { is_expected.to have_many(:buffer_updates).dependent(:nullify) }
-      it { is_expected.to have_one(:sponsorship).inverse_of(:sponsorable).dependent(:destroy) }
-
       it { is_expected.to validate_length_of(:name).is_at_most(30) }
       it { is_expected.to validate_presence_of(:category) }
 
       it { is_expected.not_to allow_value("#Hello", "c++", "AWS-Lambda").for(:name) }
 
       # rubocop:disable RSpec/NamedSubject
-      it do
-        expect(subject).to belong_to(:mod_chat_channel)
-          .class_name("ChatChannel")
-          .optional
-      end
-
       it do
         expect(subject).to validate_inclusion_of(:category)
           .in_array(%w[uncategorized language library tool site_mechanic location subcommunity])
@@ -70,22 +67,32 @@ RSpec.describe Tag, type: :model do
         expect(tag).not_to be_valid
       end
 
-      it "fails validations if name uses non-ASCII characters" do
+      it "validates name is alphanumeric characters" do
+        # arabic is allowed
         tag.name = "مرحبا"
-        expect(tag).not_to be_valid
+        expect(tag).to be_valid
 
+        # chinese is allowed
         tag.name = "你好"
-        expect(tag).not_to be_valid
+        expect(tag).to be_valid
 
+        # Polish characters are allowed
         tag.name = "Cześć"
-        expect(tag).not_to be_valid
+        expect(tag).to be_valid
 
+        # musical notes are not :alnum:
         tag.name = "♩ ♪ ♫ ♬ ♭ ♮ ♯"
         expect(tag).not_to be_valid
 
+        # ™ is not :alnum:
         tag.name = "Test™"
         expect(tag).not_to be_valid
       end
+    end
+
+    it "fails validation if name is a prohibited (whitespace) unicode character" do
+      tag.name = "U+202D"
+      expect(tag).not_to be_valid
     end
 
     describe "alias_for" do
@@ -100,6 +107,12 @@ RSpec.describe Tag, type: :model do
         expect(tag).not_to be_valid
       end
     end
+  end
+
+  it "strips HTML tags from short_summary before saving" do
+    tag.short_summary = "<p>Hello <strong>World</strong>.</p>"
+    tag.save
+    expect(tag.short_summary).to eq("Hello World.")
   end
 
   it "turns markdown into HTML before saving" do
@@ -123,41 +136,10 @@ RSpec.describe Tag, type: :model do
     end
   end
 
-  it "finds mod chat channel" do
-    channel = create(:chat_channel)
-    tag.mod_chat_channel_id = channel.id
-    expect(tag.mod_chat_channel).to eq(channel)
-  end
-
-  describe "#after_commit" do
-    it "on update enqueues job to index tag to elasticsearch" do
-      tag.save
-      sidekiq_assert_enqueued_with(job: Search::IndexWorker, args: [described_class.to_s, tag.id]) do
-        tag.save
-      end
-    end
-
-    it "on destroy enqueues job to delete tag from elasticsearch" do
-      tag.save
-      sidekiq_assert_enqueued_with(job: Search::RemoveFromIndexWorker,
-                                   args: [described_class::SEARCH_CLASS.to_s, tag.id]) do
-        tag.destroy
-      end
-    end
-
-    it "syncs related elasticsearch documents" do
-      article = create(:article)
-      podcast_episode = create(:podcast_episode)
-      tag = described_class.find(article.tags.first.id)
-      podcast_episode.tags << tag
-      new_keywords = "keyword1, keyword2, keyword3"
-      sidekiq_perform_enqueued_jobs
-
-      tag.update(keywords_for_search: new_keywords)
-      sidekiq_perform_enqueued_jobs
-      expect(collect_keywords(article)).to include(new_keywords)
-      expect(collect_keywords(podcast_episode)).to include(new_keywords)
-    end
+  it "delete tag-colors server cache on save" do
+    allow(Rails.cache).to receive(:delete)
+    tag.save
+    expect(Rails.cache).to have_received(:delete).with("view-helper-#{tag.name}/tag_colors")
   end
 
   describe "::aliased_name" do
@@ -189,7 +171,131 @@ RSpec.describe Tag, type: :model do
     end
   end
 
-  def collect_keywords(record)
-    record.elasticsearch_doc.dig("_source", "tags").flat_map { |t| t["keywords_for_search"] }
+  describe ".followed_tags_for" do
+    let(:saved_user) { create(:user) }
+    let(:tag1) { create(:tag) }
+    let(:tag2) { create(:tag) }
+    let(:tag3) { create(:tag) }
+
+    it "returns empty if no tags followed" do
+      expect(described_class.followed_tags_for(follower: saved_user).size).to eq(0)
+    end
+
+    it "returns array of tags if user follows them" do
+      saved_user.follow(tag1)
+      saved_user.follow(tag2)
+      saved_user.follow(tag3)
+      expect(described_class.followed_tags_for(follower: saved_user).size).to eq(3)
+    end
+
+    it "returns tag object with name" do
+      saved_user.follow(tag1)
+      expect(described_class.followed_tags_for(follower: saved_user).first.name).to eq(tag1.name)
+    end
+
+    it "returns follow points for tag" do
+      saved_user.follow(tag1)
+      expect(described_class.followed_tags_for(follower: saved_user).first.points).to eq(1.0)
+    end
+
+    it "returns adjusted points for tag" do
+      follow = saved_user.follow(tag1)
+      follow.update(explicit_points: 0.1)
+
+      expect(described_class.followed_tags_for(follower: saved_user).first.points).to eq(0.1)
+    end
+  end
+
+  describe "#points" do
+    it "defaults to 0" do
+      expect(described_class.new.points).to eq(0)
+    end
+  end
+
+  describe "followed_by and antifollowed_by" do
+    let(:user) { create(:user) }
+    let(:first_followed_tag) { create(:tag, name: "tagone") }
+    let(:antifollowed_tag) { create(:tag, name: "tagtwo") }
+    let(:second_followed_tag) { create(:tag, name: "tagthree") }
+    let(:other_followed_tag) { create(:tag, name: "tagfour") }
+    let(:other) { create(:user) }
+
+    before do
+      first_followed = user.follow(first_followed_tag)
+      first_followed.update explicit_points: 5
+
+      second_followed = user.follow(second_followed_tag)
+      second_followed.update explicit_points: 0
+
+      antifollowed = user.follow(antifollowed_tag)
+      antifollowed.update(explicit_points: -5, implicit_points: 6)
+
+      other.follow(other_followed_tag)
+    end
+
+    it "works as expected" do
+      results = described_class.followed_by(user)
+      expect(results).to contain_exactly(first_followed_tag, second_followed_tag)
+
+      antiresults = described_class.antifollowed_by(user)
+      expect(antiresults).to contain_exactly(antifollowed_tag)
+
+      other_results = described_class.followed_by(other)
+      expect(other_results).to contain_exactly(other_followed_tag)
+    end
+
+    it "returns tags in order of follow points" do
+      user.follow(other_followed_tag).update(explicit_points: 4)
+      Follow.where(followable_id: second_followed_tag.id).first.update(explicit_points: 2)
+      results = described_class.followed_by(user)
+
+      expected_order = [first_followed_tag, other_followed_tag, second_followed_tag]
+      expect(results.to_a).to eq(expected_order)
+    end
+  end
+
+  # [@jeremyf] The implementation details of #accessible_name are contingent on a feature flag that
+  #            we're using for this refactoring.  Once we remove the flag, please adjust the specs
+  #            accordingly.
+  describe "#accessible_name" do
+    subject(:accessible_name) { described_class.new(name: name, pretty_name: pretty_name).accessible_name }
+
+    let(:name) { "helloworld" }
+    let(:pretty_name) { "helloWorld" }
+
+    context "when favor_accessible_name_for_tag_label is true" do
+      before { allow(described_class).to receive(:favor_accessible_name_for_tag_label?).and_return(true) }
+
+      it "equals the #pretty_name" do
+        expect(accessible_name).to eq pretty_name
+      end
+    end
+
+    context "when favor_accessible_name_for_tag_label is true but no pretty name given" do
+      before { allow(described_class).to receive(:favor_accessible_name_for_tag_label?).and_return(true) }
+
+      let(:pretty_name) { nil }
+
+      it "equals the #name" do
+        expect(accessible_name).to eq name
+      end
+    end
+
+    context "when favor_accessible_name_for_tag_label is false" do
+      before { allow(described_class).to receive(:favor_accessible_name_for_tag_label?).and_return(false) }
+
+      it "equals the #name" do
+        expect(accessible_name).to eq name
+      end
+    end
+  end
+
+  context "when indexing with Algolia", :algolia do
+    it "indexes on create" do
+      allow(AlgoliaSearch::SearchIndexWorker).to receive(:perform_async)
+      create(:tag)
+      expect(AlgoliaSearch::SearchIndexWorker).to have_received(:perform_async).with("Tag", kind_of(Integer),
+                                                                                     false).once
+    end
   end
 end

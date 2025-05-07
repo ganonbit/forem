@@ -1,9 +1,9 @@
 import { h } from 'preact';
 import PropTypes from 'prop-types';
-import ClearQueryButton from './ClearQueryButton';
-import SelectedTags from './SelectedTags';
+import { ClearQueryButton } from './ClearQueryButton';
+import { SelectedTags } from './SelectedTags';
 
-const ListingFiltersTags = ({
+export const ListingFiltersTags = ({
   message,
   onKeyUp,
   onClearQuery,
@@ -15,7 +15,7 @@ const ListingFiltersTags = ({
   const shouldRenderClearQueryButton = query.length > 0;
 
   return (
-    <div className="relative pb-2 m:pb-6 px-2 m:px-0">
+    <div className="relative pb-2 m:pb-3 px-3 m:px-0">
       <input
         type="text"
         placeholder="Search..."
@@ -47,5 +47,3 @@ ListingFiltersTags.propTypes = {
   tags: PropTypes.arrayOf(PropTypes.string).isRequired,
   query: PropTypes.string.isRequired,
 };
-
-export default ListingFiltersTags;

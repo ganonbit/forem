@@ -1,22 +1,17 @@
 module EdgeCache
-  class BustUser < Bust
+  class BustUser
     def self.call(user)
       return unless user
 
+      user.purge
       username = user.username
-
+      user_id = user.id
       paths = [
-        "/#{username}",
-        "/#{username}?i=i",
-        "/#{username}/comments",
-        "/#{username}/comments?i=i",
-        "/#{username}/comments/?i=i",
-        "/live/#{username}",
-        "/live/#{username}?i=i",
-        "/feed/#{username}",
+        "/api/users/#{user_id}",
       ]
 
-      paths.each { |path| bust(path) }
+      cache_bust = EdgeCache::Bust.new
+      paths.each { |path| cache_bust.call(path) }
     end
   end
 end

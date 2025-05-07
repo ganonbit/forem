@@ -1,19 +1,8 @@
-// TODO: Remove this once we enable box-sixing: border-box globally.
-[class^='crayons'],
-[class^='crayons']::before,
-[class^='crayons']::after,
-[class^='crayons'] *,
-[class^='crayons'] *::before,
-[class^='crayons'] *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
-
-// TODO: uncomment when we're ready!
-// *,
-// *::before,
-// *::after {
-//   box-sizing: border-box;
-// }
 
 // Remove default padding
 ul[class],
@@ -84,11 +73,9 @@ textarea {
 }
 
 // Drop default outline (Crayons provides custom)
-input[type='text'],
 textarea,
-input[type='url'],
-input[type='email'],
-input[type='password'] {
+input:not([type='hidden']),
+button {
   outline: 0;
 }
 
@@ -154,10 +141,17 @@ sup {
 
 // Remove all animations and transitions for people that prefer not to see them
 @media (prefers-reduced-motion: reduce) {
-  * {
-    animation-duration: 0.01ms !important;
+  *,
+  ::before,
+  ::after {
+    animation-delay: -1ms !important;
+    animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    background-attachment: initial !important;
     scroll-behavior: auto !important;
+    transition-delay: 0s !important;
+    // A transition duration of 0s will prevent transition start/end events from firing
+    // We use 0.001s instead to ensure no unintended consequences, while still effectively stopping the animation
+    transition-duration: 0.001s !important;
   }
 }

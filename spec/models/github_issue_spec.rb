@@ -1,10 +1,10 @@
 require "rails_helper"
 
-RSpec.describe GithubIssue, type: :model, vcr: true do
-  let(:url_issue) { "https://api.github.com/repos/thepracticaldev/dev.to/issues/7434" }
-  let(:url_pull_request) { "https://api.github.com/repos/thepracticaldev/dev.to/pulls/7653" }
-  let(:url_comment) { "https://api.github.com/repos/thepracticaldev/dev.to/issues/comments/621043602" }
-  let(:url_not_found) { "https://api.github.com/repos/thepracticaldev/dev.to/issues/0" }
+RSpec.describe GithubIssue, :vcr do
+  let(:url_issue) { "https://api.github.com/repos/forem/forem/issues/7434" }
+  let(:url_pull_request) { "https://api.github.com/repos/forem/forem/pulls/7653" }
+  let(:url_comment) { "https://api.github.com/repos/forem/forem/issues/comments/621043602" }
+  let(:url_not_found) { "https://api.github.com/repos/forem/forem/issues/0" }
 
   it { is_expected.to validate_length_of(:url).is_at_most(400) }
   it { is_expected.to validate_inclusion_of(:category).in_array(%w[issue issue_comment]) }
@@ -88,10 +88,12 @@ RSpec.describe GithubIssue, type: :model, vcr: true do
     end
   end
 
-  xit "saves HTML in .processed_html" do
+  it "saves HTML in .processed_html" do
     VCR.use_cassette("github_client_issue") do
       issue = described_class.find_or_fetch(url_issue)
-      Approvals.verify(issue.processed_html, name: "github_client_issue", format: :html)
+
+      expect(issue.processed_html).to include("<p><strong>Describe the bug</strong></p>")
+      expect(issue.processed_html).to include("<p><strong>To Reproduce</strong></p>")
     end
   end
 

@@ -1,11 +1,11 @@
 class PollTag < LiquidTagBase
   PARTIAL = "liquids/poll".freeze
   VALID_CONTEXTS = %w[Article].freeze
+
   VALID_ROLES = %i[
     admin
     super_admin
   ].freeze
-
   SCRIPT = <<~JAVASCRIPT.freeze
     if (document.head.querySelector('meta[name="user-signed-in"][content="true"]')) {
       function displayPollResults(json) {
@@ -92,13 +92,22 @@ class PollTag < LiquidTagBase
         var els = document.getElementsByClassName('ltag-poll')
         for (i = 0; i < els.length; i += 1) {
           els[i].onclick = function(e) {
-            if (typeof showModal !== "undefined") {
-              showModal('poll');
+            if (typeof showLoginModal !== "undefined") {
+              showLoginModal();
             }
           }
         }
     }
   JAVASCRIPT
+
+  # @see LiquidTagBase.user_authorization_method_name for discussion
+  def self.user_authorization_method_name
+    :any_admin?
+  end
+
+  def self.script
+    SCRIPT
+  end
 
   def initialize(_tag_name, id_code, _parse_context)
     super
@@ -112,16 +121,6 @@ class PollTag < LiquidTagBase
         poll: @poll
       },
     )
-  end
-
-  def find_poll(id_code)
-    Poll.find(id_code.to_i(26))
-  rescue ActiveRecord::RecordNotFound
-    raise StandardError, "Invalid poll ID"
-  end
-
-  def self.script
-    SCRIPT
   end
 end
 

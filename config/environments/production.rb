@@ -1,3 +1,5 @@
+require "active_support/core_ext/integer/time"
+
 # rubocop:disable Metrics/BlockLength
 Rails.application.configure do
   # Allow the app to know when booted up in context where we haven't set ENV vars
@@ -37,11 +39,11 @@ Rails.application.configure do
   # Apache or NGINX already handles this.
   config.public_file_server.enabled = ENV["RAILS_SERVE_STATIC_FILES"].present?
   config.public_file_server.headers = {
-    "Cache-Control" => "public, s-maxage=#{30.days.to_i}, max-age=#{30.days.to_i}"
+    "Cache-Control" => "public, s-maxage=#{30.days.to_i}, max-age=#{3000.days.to_i}"
   }
 
   # Compress JavaScripts and CSS.
-  config.assets.js_compressor = :uglify_with_source_maps
+  config.assets.js_compressor = :terser
   # config.assets.css_compressor = :sass
 
   # Do not fallback to assets pipeline if a precompiled asset is missed.
@@ -51,35 +53,28 @@ Rails.application.configure do
   config.assets.digest = true
 
   # Enable serving of images, stylesheets, and JavaScripts from an asset server.
-  config.action_controller.asset_host = ENV["FASTLY_CDN_URL"]
+  config.action_controller.asset_host = ENV.fetch("FASTLY_CDN_URL", nil)
 
   # Specifies the header that your server uses for sending files.
   # config.action_dispatch.x_sendfile_header = 'X-Sendfile' # for Apache
   # config.action_dispatch.x_sendfile_header = 'X-Accel-Redirect' # for NGINX
-
-  # Store uploaded files on the local file system (see config/storage.yml for options)
-  # config.active_storage.service = :local
 
   # Force all access to the app over SSL, use Strict-Transport-Security, and use secure cookies.
   config.force_ssl = ENV["FORCE_SSL_IN_RAILS"] == "true"
 
   # Use the lowest log level to ensure availability of diagnostic information
   # when problems arise.
-  config.log_level = ENV["LOG_LEVEL"] || :error
+  config.log_level = ENV.fetch("LOG_LEVEL", :error)
 
   # Prepend all log lines with the following tags.
   config.log_tags = [:request_id]
 
-  # Use a different cache store in production.
-  # DEV uses the RedisCloud Heroku Add-On which comes with the predefined env variable REDISCLOUD_URL
-  redis_url = ENV["REDISCLOUD_URL"]
-  redis_url ||= ENV["REDIS_URL"]
+  # We have the option of a secondary cache store, but it is not required.
+  # The secondary store could be used for redundancy or to be used for swapping stores.
+  redis_url = ENV.fetch("REDISCLOUD_URL", nil)
+  redis_url ||= ENV.fetch("REDIS_URL", nil)
   default_expiration = 24.hours.to_i
   config.cache_store = :redis_cache_store, { url: redis_url, expires_in: default_expiration }
-
-  # Use a real queuing backend for Active Job (and separate queues per environment)
-  # config.active_job.queue_adapter     = :resque
-  # config.active_job.queue_name_prefix = "practical_developer_#{Rails.env}"
 
   config.action_mailer.perform_caching = false
 
@@ -93,6 +88,12 @@ Rails.application.configure do
 
   # Send deprecation notices to registered listeners.
   config.active_support.deprecation = :notify
+
+  # Log disallowed deprecations.
+  config.active_support.disallowed_deprecation = :log
+
+  # Tell Active Support which deprecation messages to disallow.
+  config.active_support.disallowed_deprecation_warnings = []
 
   # Filter sensitive information from production logs
   config.filter_parameters += %i[
@@ -119,28 +120,40 @@ Rails.application.configure do
   # Do not dump schema after migrations.
   config.active_record.dump_schema_after_migration = false
 
-  protocol = ENV["APP_PROTOCOL"] || "http://"
+  protocol = ENV.fetch("APP_PROTOCOL", "http://")
 
   config.action_mailer.delivery_method = :smtp
-  config.action_mailer.perform_deliveries = true
+  config.action_mailer.perform_deliveries = false
   config.action_mailer.default_url_options = { host: protocol + ENV["APP_DOMAIN"].to_s }
-  ActionMailer::Base.smtp_settings = {
-    address: "smtp.sendgrid.net",
-    port: "587",
-    authentication: :plain,
-    user_name: "apikey",
-    password: ENV["SENDGRID_API_KEY"],
-    domain: ENV["APP_DOMAIN"],
-    enable_starttls_auto: true
-  }
 
   if ENV["HEROKU_APP_URL"].present? && ENV["HEROKU_APP_URL"] != ENV["APP_DOMAIN"]
     config.middleware.use Rack::HostRedirect,
-                          ENV["HEROKU_APP_URL"] => ENV["APP_DOMAIN"]
+                          ENV.fetch("HEROKU_APP_URL", nil) => ENV.fetch("APP_DOMAIN", nil)
   end
+
+  # Inserts middleware to perform automatic connection switching.
+  # The `database_selector` hash is used to pass options to the DatabaseSelector
+  # middleware. The `delay` is used to determine how long to wait after a write
+  # to send a subsequent read to the primary.
+  #
+  # The `database_resolver` class is used by the middleware to determine which
+  # database is appropriate to use based on the time delay.
+  #
+  # The `database_resolver_context` class is used by the middleware to set
+  # timestamps for the last write to the primary. The resolver uses the context
+  # class timestamps to determine how long to wait before reading from the
+  # replica.
+  #
+  # By default Rails will store a last write timestamp in the session. The
+  # DatabaseSelector middleware is designed as such you can define your own
+  # strategy for connection switching and pass that into the middleware through
+  # these configuration options.
+  # config.active_record.database_selector = { delay: 2.seconds }
+  # config.active_record.database_resolver = ActiveRecord::Middleware::DatabaseSelector::Resolver
+  # config.active_record.database_resolver_context = ActiveRecord::Middleware::DatabaseSelector::Resolver::Session
 end
 # rubocop:enable Metrics/BlockLength
 
 Rails.application.routes.default_url_options = {
-  protocol: (ENV["APP_PROTOCOL"] || "http://").delete_suffix("://")
+  protocol: ENV.fetch("APP_PROTOCOL", "http://").delete_suffix("://")
 }

@@ -1,8 +1,28 @@
 class ArticleDecorator < ApplicationDecorator
   LONG_MARKDOWN_THRESHOLD = 900
 
+  # @return [String] JSON formatted string.
+  #
+  # @example
+  #   > Article.last.decorate.user_data_info_to_json
+  #   => "{\"user_id\":1,\"className\":\"User\",\"style\":\"full\",\"name\":\"Duane \\\"The Rock\\\" Johnson\"}"
+  def user_data_info_to_json
+    DataInfo.to_json(object: cached_user, class_name: "User", id: user_id, style: "full")
+  end
+
+  def current_state
+    state = if !published?
+              "unpublished"
+            elsif scheduled?
+              "scheduled"
+            else
+              "published"
+            end
+    ActiveSupport::StringInquirer.new(state)
+  end
+
   def current_state_path
-    published ? "/#{username}/#{slug}" : "/#{username}/#{slug}?preview=#{password}"
+    current_state.published? ? "/#{username}/#{slug}" : "/#{username}/#{slug}?preview=#{password}"
   end
 
   def processed_canonical_url
@@ -11,10 +31,6 @@ class ArticleDecorator < ApplicationDecorator
     else
       url
     end
-  end
-
-  def comments_to_show_count
-    cached_tag_list_array.include?("discuss") ? 75 : 25
   end
 
   def cached_tag_list_array
@@ -39,18 +55,6 @@ class ArticleDecorator < ApplicationDecorator
     end
   end
 
-  def internal_utm_params(place = "additional_box")
-    org_slug = organization&.slug
-
-    campaign = if boosted_additional_articles
-                 "#{org_slug}_boosted"
-               else
-                 "regular"
-               end
-
-    "?utm_source=#{place}&utm_medium=internal&utm_campaign=#{campaign}&booster_org=#{org_slug}"
-  end
-
   def published_at_int
     published_at.to_i
   end
@@ -70,7 +74,7 @@ class ArticleDecorator < ApplicationDecorator
     modified_description += "." unless description.end_with?(".")
     return modified_description if cached_tag_list.blank?
 
-    modified_description + " Tagged with #{cached_tag_list}."
+    modified_description + I18n.t("decorators.article_decorator.tagged_with", cached_tag_list: cached_tag_list)
   end
 
   def video_metadata
@@ -83,6 +87,12 @@ class ArticleDecorator < ApplicationDecorator
     }
   end
 
+  def has_recent_comment_activity?(timeframe = 1.week.ago)
+    return false if last_comment_at.blank?
+
+    last_comment_at > timeframe
+  end
+
   def long_markdown?
     body_markdown.present? && body_markdown.size > LONG_MARKDOWN_THRESHOLD
   end
@@ -92,14 +102,26 @@ class ArticleDecorator < ApplicationDecorator
   end
 
   def co_author_name_and_path
-    co_authors.map do |user|
-      "<b><a href=\"#{user.path}\">#{user.name}</a></b>"
+    User.select(:name, :username).where(id: co_author_ids).in_order_of(:id, co_author_ids).map do |user|
+      %(<a href="#{user.path}" class="crayons-link">#{user.name}</a>)
     end.to_sentence
   end
 
   # Used in determining when to bust additional routes for an Article's comments
   def discussion?
-    cached_tag_list_array.include?("discuss") &&
-      featured_number.to_i > 35.hours.ago.to_i
+    cached_tag_list_array.include?("discuss") && published_at.to_i > 35.hours.ago.to_i
+  end
+
+  def permit_adjacent_sponsors?
+    return true unless respond_to?(:user_id) && user_id.present?
+
+    author_ids = [user_id] + co_author_ids
+    Users::Setting.where(user_id: author_ids).all?(&:permit_adjacent_sponsors)
+  end
+
+  def pinned?
+    return false unless persisted?
+
+    id == PinnedArticle.id
   end
 end

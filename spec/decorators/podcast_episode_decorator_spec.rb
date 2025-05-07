@@ -6,9 +6,9 @@ RSpec.describe PodcastEpisodeDecorator, type: :decorator do
 
     it "serializes both the decorated object IDs and decorated methods" do
       expected_result = {
-        "id" => podcast_episode.id, "comments_to_show_count" => podcast_episode.comments_to_show_count
+        "id" => podcast_episode.id, "published_timestamp" => podcast_episode.published_timestamp
       }
-      expect(podcast_episode.as_json(only: [:id], methods: [:comments_to_show_count])).to eq(expected_result)
+      expect(podcast_episode.as_json(only: [:id], methods: [:published_timestamp])).to eq(expected_result)
     end
 
     it "serializes collections of decorated objects" do
@@ -16,21 +16,9 @@ RSpec.describe PodcastEpisodeDecorator, type: :decorator do
 
       decorated_collection = PodcastEpisode.decorate
       expected_result = [
-        { "id" => podcast_episode.id, "comments_to_show_count" => podcast_episode.comments_to_show_count },
+        { "id" => podcast_episode.id, "published_timestamp" => podcast_episode.published_timestamp },
       ]
-      expect(decorated_collection.as_json(only: [:id], methods: [:comments_to_show_count])).to eq(expected_result)
-    end
-  end
-
-  describe "#comments_to_show_count" do
-    it "returns 25 if does not have a discuss tag" do
-      pe = build(:podcast_episode)
-      expect(pe.decorate.comments_to_show_count).to eq(25)
-    end
-
-    it "returns 75 if it does have a discuss tag" do
-      pe = build(:podcast_episode, tag_list: ["discuss"])
-      expect(pe.decorate.comments_to_show_count).to eq(75)
+      expect(decorated_collection.as_json(only: [:id], methods: [:published_timestamp])).to eq(expected_result)
     end
   end
 
@@ -55,13 +43,13 @@ RSpec.describe PodcastEpisodeDecorator, type: :decorator do
     it "returns the correct date for a same year publication" do
       published_at = Time.current
       pe = build(:podcast_episode, published_at: published_at)
-      expect(pe.decorate.readable_publish_date).to eq(published_at.strftime("%b %e"))
+      expect(pe.decorate.readable_publish_date).to eq(published_at.strftime("%b %-e"))
     end
 
     it "returns the correct date for a publication within a different year" do
       published_at = 2.years.ago
       pe = build(:podcast_episode, published_at: published_at)
-      expect(pe.decorate.readable_publish_date).to eq(published_at.strftime("%b %e '%y"))
+      expect(pe.decorate.readable_publish_date).to eq(published_at.strftime("%b %-e '%y"))
     end
   end
 

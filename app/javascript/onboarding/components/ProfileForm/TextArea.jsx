@@ -25,9 +25,10 @@ import { h } from 'preact';
 import PropTypes from 'prop-types';
 import { FormField } from '@crayons';
 
-function TextArea(props) {
+export function TextArea(props) {
   const { onFieldChange } = props;
-  const { attribute_name, placeholder_text, description, label } = props.field;
+  const { attribute_name, placeholder_text, description, label, maxLength } =
+    props.field;
 
   return (
     <FormField>
@@ -40,6 +41,7 @@ function TextArea(props) {
         name={attribute_name}
         id={attribute_name}
         onChange={onFieldChange}
+        maxLength={maxLength}
       />
       {description && <p class="crayons-field__description">{description}</p>}
     </FormField>
@@ -53,7 +55,6 @@ TextArea.propTypes = {
     description: PropTypes.string.isRequired,
     label: PropTypes.string.isRequired,
     input_type: PropTypes.string.isRequired,
+    maxLength: PropTypes.number,
   }).isRequired,
 };
-
-export default TextArea;

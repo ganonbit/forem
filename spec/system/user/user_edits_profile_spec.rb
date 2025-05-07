@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "User edits their profile", type: :system do
+RSpec.describe "User edits their profile" do
   let(:user) { create(:user) }
   let!(:profile_field_group) { create(:profile_field_group, name: "Ice Cream") }
   let!(:left_sidebar_profile_field) do
@@ -14,12 +14,6 @@ RSpec.describe "User edits their profile", type: :system do
            profile_field_group: profile_field_group,
            label: "Hate Ice Cream Flavor",
            display_area: "header")
-  end
-  let!(:settings_only_profile_field) do
-    create(:profile_field,
-           profile_field_group: profile_field_group,
-           label: "Imaginary Ice Cream Flavor",
-           display_area: "settings_only")
   end
 
   before do
@@ -48,36 +42,44 @@ RSpec.describe "User edits their profile", type: :system do
 
   describe "editing admin created profile fields" do
     before do
-      allow(FeatureFlag).to receive(:enabled?).with(:profile_admin).and_return(true)
       Profile.refresh_attributes!
     end
 
     it "renders profile fields" do
-      expect(page).to have_text(left_sidebar_profile_field.attribute_name.titleize)
-      expect(page).to have_text(header_profile_field.attribute_name.titleize)
-      expect(page).to have_text(settings_only_profile_field.attribute_name.titleize)
+      expect(page).to have_text(left_sidebar_profile_field.label.titleize)
+      expect(page).to have_text(header_profile_field.label.titleize)
     end
 
     it "reflects set profile fields in the interface" do
       fill_in "profile[#{left_sidebar_profile_field.attribute_name}]", with: "chocolate"
       fill_in "profile[#{header_profile_field.attribute_name}]", with: "pistachio"
-      fill_in "profile[#{settings_only_profile_field.attribute_name}]", with: "cthulhu"
       click_button "Save"
 
       visit "/#{user.username}"
 
-      expect(page).not_to have_text(settings_only_profile_field.attribute_name.titleize)
       expect(page).not_to have_text("cthulhu")
 
       within(".crayons-layout__sidebar-left") do
-        expect(page).to have_text(left_sidebar_profile_field.attribute_name.titleize)
+        expect(page).to have_text(left_sidebar_profile_field.label.titleize)
         expect(page).to have_text("chocolate")
       end
 
       within(".profile-header") do
-        expect(page).to have_text(header_profile_field.attribute_name.titleize)
+        expect(page).to have_text(header_profile_field.label.titleize)
         expect(page).to have_text("pistachio")
       end
+    end
+
+    it "respects static profile fields", :aggregate_failures do
+      fill_in "profile[summary]", with: "Star of hit 90s sitcom Horsin' Around"
+      fill_in "profile[location]", with: "Hollywoo"
+
+      click_button "Save"
+
+      visit "/#{user.username}"
+
+      expect(page).to have_text("Horsin' Around")
+      expect(page).to have_text("Hollywoo")
     end
   end
 end

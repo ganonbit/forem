@@ -1,9 +1,8 @@
 import PropTypes from 'prop-types';
 
-export default PropTypes.shape({
+export const listingPropTypes = PropTypes.shape({
   id: PropTypes.number,
   category: PropTypes.string,
-  contact_via_connect: PropTypes.bool,
   location: PropTypes.string,
   processed_html: PropTypes.string,
   slug: PropTypes.string,

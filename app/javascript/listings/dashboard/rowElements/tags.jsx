@@ -1,9 +1,9 @@
 import PropTypes from 'prop-types';
 import { h } from 'preact';
 
-const Tags = ({ tagList }) => {
+export const Tags = ({ tagList }) => {
   const tagLinks = tagList.map((tag) => (
-    <a href={`/listings?t=${tag}`} data-no-instant>
+    <a key={tag} href={`/listings?t=${tag}`} data-no-instant>
       #{tag}{' '}
     </a>
   ));
@@ -14,5 +14,3 @@ const Tags = ({ tagList }) => {
 Tags.propTypes = {
   tagList: PropTypes.arrayOf(PropTypes.string).isRequired,
 };
-
-export default Tags;

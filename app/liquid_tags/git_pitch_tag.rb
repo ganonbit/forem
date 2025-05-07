@@ -1,6 +1,6 @@
 class GitPitchTag < LiquidTagBase
   PARTIAL = "liquids/gitpitch".freeze
-  URL_REGEXP = %r{(http|https)://gitpitch.com/[a-zA-Z0-9\-/]*}.freeze
+  URL_REGEXP = %r{(http|https)://gitpitch.com/[a-zA-Z0-9\-/]*}
 
   def initialize(_tag_name, link, _parse_context)
     super
@@ -20,7 +20,7 @@ class GitPitchTag < LiquidTagBase
 
   def parse_link(link)
     stripped_link = ActionController::Base.helpers.strip_tags(link)
-    the_link = stripped_link.split(" ").first
+    the_link = stripped_link.split.first
     raise_error unless valid_link?(the_link)
     the_link
   end
@@ -31,7 +31,7 @@ class GitPitchTag < LiquidTagBase
   end
 
   def raise_error
-    raise StandardError, "Invalid GitPitch URL"
+    raise StandardError, I18n.t("liquid_tags.git_pitch_tag.invalid_gitpitch_url")
   end
 end
 

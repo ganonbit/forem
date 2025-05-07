@@ -1,15 +1,17 @@
 require "rails_helper"
 
-RSpec.describe "User visits articles by tag", type: :system do
+RSpec.describe "User visits articles by tag" do
   let(:js_tag) { create(:tag, name: "javascript") }
   let(:iot_tag) { create(:tag, name: "IoT") }
   let!(:func_tag) { create(:tag, name: "functional") }
 
   let(:author) { create(:user, profile_image: nil) }
-  let!(:article) { create(:article, tags: "javascript, IoT", user: author, published_at: 2.days.ago, score: 5) }
+  let!(:article) do
+    create(:article, :past, past_published_at: 2.days.ago, tags: "javascript, IoT", user: author, score: 5)
+  end
   let!(:article2) { create(:article, tags: "functional", user: author, published_at: Time.current, score: 5) }
   let!(:article3) do
-    create(:article, tags: "functional, javascript", user: author, published_at: 2.weeks.ago, score: 5)
+    create(:article, :past, past_published_at: 2.weeks.ago, tags: "functional, javascript", user: author, score: 5)
   end
 
   context "when user hasn't logged in" do
@@ -18,12 +20,18 @@ RSpec.describe "User visits articles by tag", type: :system do
         visit "/t/javascript"
       end
 
-      it "shows the header", js: true, stub_elasticsearch: true do
-        within("h1") { expect(page).to have_text("javascript") }
+      it "shows the header", js: true do
+        within("h1.crayons-title") { expect(page).to have_text("javascript") }
       end
 
-      it "shows the follow button", js: true, stub_elasticsearch: true do
-        within("header.tag-header") { expect(page).to have_button("Follow") }
+      it "shows the follow button", js: true do
+        within("header.spec__tag-header") { expect(page).to have_button(I18n.t("core.follow")) }
+      end
+
+      # Regression test for https://github.com/forem/forem/pull/12724
+      it "does not display a comment count of 0", js: true do
+        expect(page).to have_text("Add Comment")
+        expect(page).not_to have_text("0 #{I18n.t('core.comment').downcase}s")
       end
 
       it "shows correct articles count" do
@@ -31,7 +39,7 @@ RSpec.describe "User visits articles by tag", type: :system do
       end
 
       it "shows the correct articles" do
-        within("#articles-list") do
+        within("#main-content") do
           expect(page).to have_text(article.title)
           expect(page).to have_text(article3.title)
           expect(page).not_to have_text(article2.title)
@@ -56,16 +64,16 @@ RSpec.describe "User visits articles by tag", type: :system do
       visit "/t/functional"
     end
 
-    it "shows the following button", js: true, stub_elasticsearch: true do
+    it "shows the following button", js: true do
       wait_for_javascript
 
-      within("header.tag-header") { expect(page).to have_button("Following") }
+      within("header.spec__tag-header") { expect(page).to have_button(I18n.t("core.following")) }
     end
 
-    it "shows time buttons" do
+    it "shows top level sort options" do
       within("#on-page-nav-controls") do
-        expect(page).to have_link("Week", href: "/t/functional/top/week")
-        expect(page).to have_link("Infinity", href: "/t/functional/top/infinity")
+        expect(page).to have_link("Relevant", href: "/t/functional")
+        expect(page).to have_link("Top", href: "/t/functional/top/week")
         expect(page).to have_link("Latest", href: "/t/functional/latest")
       end
     end

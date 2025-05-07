@@ -10,9 +10,13 @@ class Badge < ApplicationRecord
   validates :description, presence: true
   validates :slug, presence: true
   validates :title, presence: true, uniqueness: true
+  validates :allow_multiple_awards, inclusion: { in: [true, false] }
 
   before_validation :generate_slug
-  after_save :bust_path
+
+  def self.id_for_slug(slug)
+    select(:id).find_by(slug: slug)&.id
+  end
 
   def path
     "/badge/#{slug}"
@@ -22,10 +26,5 @@ class Badge < ApplicationRecord
 
   def generate_slug
     self.slug = CGI.escape(title.to_s).parameterize
-  end
-
-  def bust_path
-    CacheBuster.bust(path)
-    CacheBuster.bust("#{path}?i=i")
   end
 end

@@ -13,6 +13,7 @@
 
 pre:not(.highlight),
 div.highlight,
+div:not(.highlight) > pre.highlight,
 li pre.highlight,
 blockquote pre.highlight {
   background: var(--syntax-background-color);
@@ -23,6 +24,11 @@ blockquote pre.highlight {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   overflow-wrap: initial;
+  padding: var(--su-2);
+
+  @media (min-width: $breakpoint-m) {
+    padding: var(--su-6);
+  }
 
   code {
     font-size: 100%;
@@ -36,12 +42,6 @@ div.highlight {
   // this a way to separate scroll of long code & icons in panel
   .highlight {
     overflow: auto;
-
-    padding: var(--su-2);
-
-    @media (min-width: $breakpoint-m) {
-      padding: var(--su-6);
-    }
   }
 }
 
@@ -77,9 +77,10 @@ div.highlight {
 
 .highlight-action {
   display: none;
-  width: var(--su-4);
-  height: var(--su-4);
   cursor: pointer;
+  color: var(--base-inverted);
+  width: var(--su-5);
+  height: var(--su-5);
 }
 
 .highlight-action--fullscreen-on {
@@ -131,6 +132,10 @@ code {
   max-width: 100%;
   font-size: 80%;
   padding: 0.1em 0.25em;
+}
+
+p > code {
+  background: var(--code-inline-bg);
 }
 
 .highlight .hll {

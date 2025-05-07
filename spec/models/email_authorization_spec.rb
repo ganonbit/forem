@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe EmailAuthorization, type: :model do
+RSpec.describe EmailAuthorization do
   let(:email_authorization) { create(:email_authorization) }
 
   describe "validations" do
@@ -29,6 +29,27 @@ RSpec.describe EmailAuthorization, type: :model do
   describe "#sent_at" do
     it "is aliased to #created_at" do
       expect(email_authorization.sent_at).to eq(email_authorization.created_at)
+    end
+  end
+
+  describe ".last_verification_date" do
+    let(:user) { create(:user) }
+
+    it "returns nil if there are no email authorizations" do
+      expect(described_class.last_verification_date(user)).to be_nil
+    end
+
+    it "does not return unverified email authorizations" do
+      create(:email_authorization, user: user, verified_at: nil)
+
+      expect(described_class.last_verification_date(user)).to be_nil
+    end
+
+    it "returns the last email authorization's date" do
+      ea1 = create(:email_authorization, user: user, created_at: 1.day.ago, verified_at: 1.day.ago)
+      create(:email_authorization, user: user, created_at: 1.month.ago, verified_at: 1.month.ago)
+
+      expect(described_class.last_verification_date(user).iso8601).to eq(ea1.verified_at.iso8601)
     end
   end
 end

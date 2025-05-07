@@ -1,55 +1,41 @@
-// Shared behavior between the reading list and history pages
+// Used in the reading list
 import { fetchSearch } from '../utilities/search';
-
-// Provides the initial state for the component
-export function defaultState(options) {
-  const state = {
-    query: '',
-    index: null,
-
-    page: 0,
-    hitsPerPage: 80,
-    totalCount: 0,
-
-    items: [],
-    itemsLoaded: false,
-
-    availableTags: [],
-    selectedTags: [],
-
-    showLoadMoreButton: false,
-  };
-  return Object.assign({}, state, options);
-}
 
 // Starts the search when the user types in the search box
 export function onSearchBoxType(event) {
   const component = this;
 
   const query = event.target.value;
-  const { selectedTags, statusView } = component.state;
+  const { selectedTag, statusView } = component.state;
 
   component.setState({ page: 0 });
   component.search(query, {
-    tags: selectedTags,
+    tags: selectedTag ? [selectedTag] : [],
     statusView,
     appendItems: false,
   });
 }
 
-export function toggleTag(event, tag) {
+export function selectTag(event) {
   event.preventDefault();
-
+  const { value, dataset, skipPushState } = event.target;
+  const selectedTagOrAll = value ?? dataset.tag;
+  const selectedTag = selectedTagOrAll?.match(/all tags/i) ? null : selectedTagOrAll;
   const component = this;
-  const { query, selectedTags, statusView } = component.state;
-  const newTags = selectedTags;
-  if (newTags.indexOf(tag) === -1) {
-    newTags.push(tag);
-  } else {
-    newTags.splice(newTags.indexOf(tag), 1);
+  const { query, statusView } = component.state;
+
+  component.setState({ selectedTag, page: 0, items: [] });
+  component.search(query, {
+    tags: selectedTag ? [selectedTag] : [],
+    statusView,
+    appendItems: false,
+  });
+
+  // persist the selected tag in query params
+  if (!skipPushState) {
+    const newQueryParams = selectedTag ? `?selectedTag=${selectedTag}` : '';
+    window.history.pushState(null, null, `/readinglist${newQueryParams}`);
   }
-  component.setState({ selectedTags: newTags, page: 0, items: [] });
-  component.search(query, { tags: newTags, statusView, appendItems: false });
 }
 
 export function clearSelectedTags(event) {
@@ -57,16 +43,17 @@ export function clearSelectedTags(event) {
 
   const component = this;
   const { query, statusView } = component.state;
-  const newTags = [];
-  component.setState({ selectedTags: newTags, page: 0, items: [] });
-  component.search(query, { tags: newTags, statusView, appendItems: false });
+  component.setState({ selectedTag: '', page: 0, items: [] });
+  component.search(query, { tags: [], statusView, appendItems: false });
 }
 
 // Perform the initial search
-export function performInitialSearch({ searchOptions = {} }) {
+export async function performInitialSearch({ searchOptions = {} }) {
   const component = this;
   const { hitsPerPage } = component.state;
   const dataHash = { page: 0, per_page: hitsPerPage };
+
+  component.setState({ loading: true });
 
   if (searchOptions.status) {
     dataHash.status = searchOptions.status.split(',');
@@ -75,6 +62,8 @@ export function performInitialSearch({ searchOptions = {} }) {
   const responsePromise = fetchSearch('reactions', dataHash);
   return responsePromise.then((response) => {
     const reactions = response.result;
+    // FIXME: [@rhymes] the list of tags in the left column of the reading list
+    // is populated with only the tags belonging to items in the first page
     const availableTags = [
       ...new Set(reactions.flatMap((rxn) => rxn.reactable.tag_list)),
     ].sort();
@@ -82,9 +71,10 @@ export function performInitialSearch({ searchOptions = {} }) {
       page: 0,
       items: reactions,
       itemsLoaded: true,
-      totalCount: response.total,
+      itemsTotal: response.total,
       showLoadMoreButton: hitsPerPage < response.total,
       availableTags,
+      loading: false,
     });
   });
 }
@@ -92,6 +82,8 @@ export function performInitialSearch({ searchOptions = {} }) {
 // Main search function
 export function search(query, { page, tags, statusView, appendItems = false }) {
   const component = this;
+
+  component.setState({ loading: true });
 
   // allow the page number to come from the calling function
   // we check `undefined` because page can be 0
@@ -130,8 +122,9 @@ export function search(query, { page, tags, statusView, appendItems = false }) {
       query,
       page: newPage,
       items,
-      totalCount: response.total,
+      itemsTotal: response.total,
       showLoadMoreButton: items.length < response.total,
+      loading: false,
     });
   });
 }
@@ -140,12 +133,22 @@ export function search(query, { page, tags, statusView, appendItems = false }) {
 export function loadNextPage() {
   const component = this;
 
-  const { query, selectedTags, page, statusView } = component.state;
+  const { query, selectedTag, page, statusView } = component.state;
   component.setState({ page: page + 1 });
   component.search(query, {
     page: page + 1,
-    tags: selectedTags,
+    tags: selectedTag ? [selectedTag] : [],
     statusView,
     appendItems: true,
   });
 }
+
+export function checkForPersistedTag(availableTags) {
+  // credit: https://stackoverflow.com/a/9870540
+  const params = (new URL(window.location)).searchParams
+  const selectedTag = params.get('selectedTag');
+
+  if (availableTags?.includes(selectedTag)) return selectedTag;
+  return null;
+}
+

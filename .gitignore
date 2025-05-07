@@ -17,6 +17,7 @@ vendor/bundle
 .approvals
 .torus.json
 coverage
+.nyc_output
 /tags
 
 # Ignore public uploads
@@ -32,7 +33,6 @@ node_modules/
 /app/assets/javascripts/generated/*
 latest.dump
 .byebug_history
-.gitdocs_build/
 
 # Ignore application configuration
 /config/application.yml
@@ -42,11 +42,23 @@ latest.dump
 /node_modules
 yarn-debug.log*
 .yarn-integrity
+.env.test.local
+.env.development*
 .env
 
 # Ignore storybook static site generation
 app/javascript/storybook-static/
 yarn-error.log
+
+# Ignore yarn related files
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+.yarn/install-state.gz
 
 # Ignore package-lock.json because we use yarn
 package-lock.json
@@ -54,16 +66,15 @@ package-lock.json
 #Jetbrains Tools
 .idea/
 
+#Nova from Panic
+.nova/
+
 #sitemap
 /public/sitemap.xml.gz
+/public/sitemaps/
 
 # Development Docker storage location
 _docker-storage/
-
-# YARD generated doc (in the Gitdocs folder)
-docs/.static/ruby-doc/
-# ReDoc generated API doc (in the Gitdocs folder)
-docs/.static/api/
 
 # AWS Cloud9 specific folder for user settings
 .c9/
@@ -87,3 +98,33 @@ bundle_finished
 
 # Auto-generated Storybook stories
 app/javascript/generated_stories/
+
+# Cypress test run artifacts
+cypress/videos
+cypress/screenshots
+cypress/logs
+cypress/results
+
+# PostCSS error log
+postcss_error.log
+
+# ripgrep ignore file
+.rgignore
+config/definitions.rb
+
+# ignore redis backup
+dump.rdb
+
+# pry configuration file
+.pryrc
+
+# generated yarddoc
+doc/
+
+# spec reports
+/spec/reports
+/junit.xml
+
+/app/assets/builds/*
+!/app/assets/builds/.keep
+.qodo

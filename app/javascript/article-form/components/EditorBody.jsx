@@ -1,38 +1,18 @@
 import { h } from 'preact';
 import PropTypes from 'prop-types';
-import Textarea from 'preact-textarea-autosize';
-import { useEffect, useRef } from 'preact/hooks';
+import { useLayoutEffect, useRef } from 'preact/hooks';
 import { Toolbar } from './Toolbar';
+import { handleImagePasted } from './pasteImageHelpers';
 import {
-  handleImageDrop,
-  handleImageFailure,
-  onDragOver,
-  onDragExit,
-} from './dragAndDropHelpers';
+  handleImageUploadSuccess,
+  handleImageUploading,
+  handleImageUploadFailure,
+} from './imageUploadHelpers';
+import { handleImageDrop, onDragOver, onDragExit } from './dragAndDropHelpers';
+import { usePasteImage } from '@utilities/pasteImage';
 import { useDragAndDrop } from '@utilities/dragAndDrop';
-
-function handleImageSuccess(textAreaRef) {
-  return function (response) {
-    // Function is within the component to be able to access
-    // textarea ref.
-    const editableBodyElement = textAreaRef.current.base;
-    const { links, image } = response;
-    const altText = image[0].name.replace(/\.[^.]+$/, '');
-    const markdownImageLink = `![${altText}](${links[0]})\n`;
-    const { selectionStart, selectionEnd, value } = editableBodyElement;
-    const before = value.substring(0, selectionStart);
-    const after = value.substring(selectionEnd, value.length);
-
-    editableBodyElement.value = `${before + markdownImageLink} ${after}`;
-    editableBodyElement.selectionStart =
-      selectionStart + markdownImageLink.length;
-    editableBodyElement.selectionEnd = editableBodyElement.selectionStart;
-
-    // Dispatching a new event so that linkstate, https://github.com/developit/linkstate,
-    // the function used to create the onChange prop gets called correctly.
-    editableBodyElement.dispatchEvent(new Event('input'));
-  };
-}
+import { fetchSearch } from '@utilities/search';
+import { AutocompleteTriggerTextArea } from '@crayons/AutocompleteTriggerTextArea';
 
 export const EditorBody = ({
   onChange,
@@ -41,18 +21,29 @@ export const EditorBody = ({
   version,
 }) => {
   const textAreaRef = useRef(null);
+
   const { setElement } = useDragAndDrop({
     onDrop: handleImageDrop(
-      handleImageSuccess(textAreaRef),
-      handleImageFailure,
+      handleImageUploading(textAreaRef),
+      handleImageUploadSuccess(textAreaRef),
+      handleImageUploadFailure(textAreaRef),
     ),
     onDragOver,
     onDragExit,
   });
 
-  useEffect(() => {
+  const setPasteElement = usePasteImage({
+    onPaste: handleImagePasted(
+      handleImageUploading(textAreaRef),
+      handleImageUploadSuccess(textAreaRef),
+      handleImageUploadFailure(textAreaRef),
+    ),
+  });
+
+  useLayoutEffect(() => {
     if (textAreaRef.current) {
-      setElement(textAreaRef.current.base);
+      setElement(textAreaRef.current);
+      setPasteElement(textAreaRef.current);
     }
   });
 
@@ -61,20 +52,26 @@ export const EditorBody = ({
       data-testid="article-form__body"
       className="crayons-article-form__body drop-area text-padding"
     >
-      <Toolbar version={version} />
-
-      <Textarea
-        className="crayons-textfield crayons-textfield--ghost crayons-article-form__body__field"
-        id="article_body_markdown"
-        aria-label="Post Content"
-        placeholder="Write your post content here..."
-        value={defaultValue}
-        onInput={onChange}
-        onFocus={(_event) => {
-          switchHelpContext(_event);
-        }}
-        name="body_markdown"
+      <Toolbar version={version} textAreaId="article_body_markdown" />
+      <AutocompleteTriggerTextArea
+        triggerCharacter="@"
+        maxSuggestions={6}
+        searchInstructionsMessage="Type to search for a user"
         ref={textAreaRef}
+        fetchSuggestions={(username) =>
+          fetchSearch('usernames', { username }).then(({ result }) =>
+            result.map((user) => ({ ...user, value: user.username })),
+          )
+        }
+        autoResize
+        onChange={onChange}
+        onFocus={switchHelpContext}
+        aria-label="Post Content"
+        name="body_markdown"
+        id="article_body_markdown"
+        defaultValue={defaultValue}
+        placeholder="Write your post content here..."
+        className="crayons-textfield crayons-textfield--ghost crayons-article-form__body__field ff-monospace fs-l h-100"
       />
     </div>
   );

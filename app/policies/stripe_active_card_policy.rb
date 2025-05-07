@@ -1,11 +1,9 @@
 class StripeActiveCardPolicy < ApplicationPolicy
   def create?
-    !user_is_banned?
+    !user.spam_or_suspended?
   end
 
-  def update?
-    !user_is_banned?
-  end
+  alias update? create?
 
   def destroy?
     true

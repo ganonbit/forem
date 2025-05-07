@@ -13,7 +13,8 @@ class RateLimitChecker
     reaction_creation: { retry_after: 30 },
     send_email_confirmation: { retry_after: 120 },
     user_subscription_creation: { retry_after: 30 },
-    user_update: { retry_after: 30 }
+    user_update: { retry_after: 30 },
+    comment_antispam_creation: { retry_after: 300 }
   }.with_indifferent_access.freeze
 
   def initialize(user = nil)
@@ -23,16 +24,17 @@ class RateLimitChecker
   class LimitReached < StandardError
     attr_reader :retry_after
 
-    def initialize(retry_after) # rubocop:disable Lint/MissingSuper
+    def initialize(retry_after)
       @retry_after = retry_after
     end
 
     def message
-      "Rate limit reached, try again in #{retry_after} seconds"
+      I18n.t("services.rate_limit_checker.limit_reached", count: retry_after)
     end
   end
 
   def check_limit!(action)
+    return if ApplicationConfig["E2E"]
     return unless limit_by_action(action)
 
     retry_after = ACTION_LIMITERS.dig(action, :retry_after)
@@ -40,6 +42,8 @@ class RateLimitChecker
   end
 
   def limit_by_action(action)
+    return false if ApplicationConfig["E2E"]
+
     check_method = "check_#{action}_limit"
     result = respond_to?(check_method, true) ? __send__(check_method) : false
 
@@ -58,7 +62,7 @@ class RateLimitChecker
   def limit_by_email_recipient_address(address)
     # This is related to the recipient, not the "user" initiator, like in action.
     EmailMessage.where(to: address).where("sent_at > ?", 2.minutes.ago).size >
-      SiteConfig.rate_limit_email_recipient
+      Settings::RateLimit.email_recipient
   end
 
   private
@@ -71,45 +75,51 @@ class RateLimitChecker
 
   def limit_cache_key(action)
     unique_key_component = @user&.id || @user&.ip_address
-    raise "Invalid Cache Key: no unique component present" if unique_key_component.blank?
+    raise I18n.t("services.rate_limit_checker.invalid_key") if unique_key_component.blank?
 
     "#{unique_key_component}_#{action}"
   end
 
   def action_rate_limit(action)
-    SiteConfig.public_send("rate_limit_#{action}")
+    Settings::RateLimit.public_send(action)
   end
 
   def check_comment_creation_limit
     user.comments.where("created_at > ?", 30.seconds.ago).size >
-      SiteConfig.rate_limit_comment_creation
+      Settings::RateLimit.comment_creation
   end
 
   def check_published_article_creation_limit
-    # TODO: Vaidehi Joshi - We should make this time frame configurable.
-    user.articles.published.where("created_at > ?", 30.seconds.ago).size >
-      SiteConfig.rate_limit_published_article_creation
+    # TODO: We should make this time frame configurable.
+    user.articles.published.from_subforem.where("created_at > ?", 30.seconds.ago).size >
+      Settings::RateLimit.published_article_creation
   end
 
   def check_published_article_antispam_creation_limit
-    # TODO: Vaidehi Joshi - We should make this time frame configurable.
-    user.articles.published.where("created_at > ?", 5.minutes.ago).size >
-      SiteConfig.rate_limit_published_article_antispam_creation
+    # TODO: We should make this time frame configurable.
+    user.articles.published.from_subforem.where("created_at > ?", 5.minutes.ago).size >
+      Settings::RateLimit.published_article_antispam_creation
+  end
+
+  def check_comment_antispam_creation_limit
+    # TODO: We should make this time frame configurable.
+    user.comments.where(created_at: 5.minutes.ago...).size >
+      Settings::RateLimit.comment_antispam_creation
   end
 
   def check_follow_account_limit
-    user_today_follow_count > SiteConfig.rate_limit_follow_count_daily
+    user_today_follow_count > Settings::RateLimit.follow_count_daily
   end
 
   def user_today_follow_count
     following_users_count = user.following_users_count
-    return following_users_count if following_users_count < SiteConfig.rate_limit_follow_count_daily
+    return following_users_count if following_users_count < Settings::RateLimit.follow_count_daily
 
     now = Time.zone.now
     user.follows.where(created_at: (now.beginning_of_day..now)).size
   end
 
   def log_to_datadog
-    DatadogStatsClient.increment("rate_limit.limit_reached", tags: ["user:#{user.id}", "action:#{action}"])
+    ForemStatsClient.increment("rate_limit.limit_reached", tags: ["user:#{user.id}", "action:#{action}"])
   end
 end

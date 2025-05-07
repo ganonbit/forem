@@ -1,10 +1,8 @@
-/*
-  global selectNavigation
-*/
 import { h, Component } from 'preact';
 import PropTypes from 'prop-types';
+import { selectNavigation } from '../../packs/initializers/initializeDashboardSort';
 
-export class CategoryLinks extends Component {
+export class CategoryLinksMobile extends Component {
   componentDidMount() {
     selectNavigation('mobile_nav_listings');
   }
@@ -26,6 +24,7 @@ export class CategoryLinks extends Component {
           {categories.map((category) => {
             return (
               <option
+                key={category.slug}
                 value={`/listings/${category.slug}`}
                 selected={category.slug === selectedCategory}
               >
@@ -39,7 +38,7 @@ export class CategoryLinks extends Component {
   }
 }
 
-CategoryLinks.propTypes = {
+CategoryLinksMobile.propTypes = {
   categories: PropTypes.arrayOf(
     PropTypes.shape({
       slug: PropTypes.string.isRequired,
@@ -48,5 +47,3 @@ CategoryLinks.propTypes = {
   ).isRequired,
   selectedCategory: PropTypes.string.isRequired,
 };
-
-export default CategoryLinks;

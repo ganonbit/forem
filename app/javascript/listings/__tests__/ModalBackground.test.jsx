@@ -1,7 +1,7 @@
 import { h } from 'preact';
 import { render } from '@testing-library/preact';
 import { axe } from 'jest-axe';
-import ModalBackground from '../components/ModalBackground';
+import { ModalBackground } from '../components/ModalBackground';
 
 describe('<ModalBackground />', () => {
   const defaultProps = {
@@ -19,7 +19,7 @@ describe('<ModalBackground />', () => {
   it('should render', () => {
     const { queryByTestId } = render(<ModalBackground {...defaultProps} />);
 
-    expect(queryByTestId('listings-modal-background')).toBeDefined();
+    expect(queryByTestId('listings-modal-background')).toExist();
   });
 
   it('should call the onClick handler', () => {

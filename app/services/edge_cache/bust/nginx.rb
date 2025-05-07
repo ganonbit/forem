@@ -14,7 +14,7 @@ module EdgeCache
       end
 
       def self.nginx_available?
-        # TODO: (Vaidehi Joshi) - Right now, we are checking that nginx is
+        # TODO: Right now, we are checking that nginx is
         # available on every purge request/call to this bust service. If we are going
         # to bust multiple paths, we should be able to check that nginx is
         # available just once, and persist it on the class with @provider_available?.
@@ -29,8 +29,8 @@ module EdgeCache
         # If we can't connect to OpenResty, alert ourselves that
         # it is unavailable and return false.
         Rails.logger.error("Could not connect to OpenResty via #{ApplicationConfig['OPENRESTY_URL']}!")
-        DatadogStatsClient.increment("edgecache_bust.service_unavailable",
-                                     tags: ["path:#{ApplicationConfig['OPENRESTY_URL']}"])
+        ForemStatsClient.increment("edgecache_bust.service_unavailable",
+                                   tags: ["path:#{ApplicationConfig['OPENRESTY_URL']}"])
         false
       end
     end

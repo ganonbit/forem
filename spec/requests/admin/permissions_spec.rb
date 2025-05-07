@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "/admin/permissions", type: :request do
+RSpec.describe "/admin/permissions" do
   context "when the user is not an admin" do
     let(:user) { create(:user) }
 
@@ -10,7 +10,7 @@ RSpec.describe "/admin/permissions", type: :request do
 
     it "blocks the request" do
       expect do
-        get "/admin/permissions"
+        get admin_permissions_path
       end.to raise_error(Pundit::NotAuthorizedError)
     end
   end
@@ -20,7 +20,7 @@ RSpec.describe "/admin/permissions", type: :request do
 
     before do
       sign_in super_admin
-      get "/admin/permissions"
+      get admin_permissions_path
     end
 
     it "allows the request" do
@@ -33,7 +33,7 @@ RSpec.describe "/admin/permissions", type: :request do
 
     before do
       sign_in single_resource_admin
-      get "/admin/permissions"
+      get admin_permissions_path
     end
 
     it "allows the request" do
@@ -50,7 +50,7 @@ RSpec.describe "/admin/permissions", type: :request do
 
     it "blocks the request" do
       expect do
-        get "/admin/permissions"
+        get admin_permissions_path
       end.to raise_error(Pundit::NotAuthorizedError)
     end
   end

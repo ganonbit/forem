@@ -32,7 +32,7 @@
   max-width: var(--site-width);
   margin: 0 auto;
   display: grid;
-  grid-gap: var(--layout-gap);
+  gap: var(--layout-gap);
   grid-template-columns: var(--layout);
   padding: var(--layout-padding);
 
@@ -73,7 +73,7 @@
   }
 
   &--limited-xs {
-    --site-width: 480px;
+    --site-width: #{$breakpoint-xs};
   }
 
   &--limited-inner-l {
@@ -192,6 +192,17 @@
   }
 }
 
+// Unlike the main app, in the admin area we only break into 2 side-by-side columns at large breakpoint,
+// to allow more real estate for data tables
+.crayons-layout--admin-2-cols {
+  @media (min-width: $breakpoint-l) {
+    --layout: var(--layout-sidebar-left-width) var(--layout-content-width);
+    --layout-sidebar-left-width: 240px;
+    --layout-content-width: 1fr;
+    --layout-gap: var(--su-4);
+  }
+}
+
 // Temporary solution for sidebar on mobile
 .crayons-layout__sidebar-left,
 .crayons-layout__sidebar-right {
@@ -276,11 +287,49 @@
     --content-padding-y: var(--su-7);
   }
 
-  @media (min-width: $breakpoint-xl) {
+  @media (min-width: $breakpoint-l) {
     --content-padding-x: var(--su-9);
   }
 }
 
 .text-padding {
   padding: var(--content-padding-y) var(--content-padding-x);
+}
+
+.crayons-page-header {
+  --layout-padding: var(--su-3);
+
+  @media (min-width: $breakpoint-l) {
+    --layout-padding: var(--su-4);
+  }
+
+  padding: var(--layout-padding);
+  max-width: var(--site-width);
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  @media (min-width: $breakpoint-m) {
+    min-height: unset;
+  }
+}
+
+.crayons-layout--header-inside {
+  --header-span: 1 / span 1;
+  &.crayons-layout--2-cols {
+    --header-span: 1 / span 2;
+  }
+  grid-template-rows: min-content 1fr;
+  row-gap: 0;
+
+  @media (min-width: $breakpoint-m) {
+    row-gap: var(--layout-gap);
+
+    .crayons-page-header {
+      --layout-padding: 0;
+      grid-column: var(--header-span);
+    }
+  }
 }

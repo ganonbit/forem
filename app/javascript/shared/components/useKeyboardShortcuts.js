@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'preact/hooks';
+import { useState, useEffect } from 'preact/hooks';
 import PropTypes from 'prop-types';
 
 /**
@@ -25,6 +25,37 @@ function isFormField(element) {
   );
 }
 
+/**
+ * Function to handle converting key presses to callback functions
+ *
+ * @param {KeyboardEvent} e Keyboard event
+ * @param {String} keys special keys formatted in a string
+ * @param {Array} chain array of past keys
+ * @param {Object} shortcuts object containing callback functions
+ *
+ * @returns {Array} New chain
+ */
+const callShortcut = (e, keys, chain, shortcuts) => {
+  const shortcut =
+    chain && chain.length > 0
+      ? shortcuts[`${chain.join('~')}~${e.code}`]
+      : shortcuts[`${keys}${e.code}`] ||
+        shortcuts[`${keys}${e.key.toLowerCase()}`];
+
+  // if a valid shortcut is found call it and reset the chain
+  if (shortcut) {
+    shortcut(e);
+    return [];
+  }
+
+  // if we have keys don't add to the chain
+  if (keys || e.key === 'Shift') {
+    return [];
+  }
+
+  return [...chain, e.code];
+};
+
 // Default options to be used if null
 const defaultOptions = {
   timeout: 0, // The default is zero as we want no delays between keystrokes by default.
@@ -36,15 +67,15 @@ const defaultOptions = {
  *
  * @example
  * const shortcuts = {
- *   "ctrl+alt+KeyG": (e) => {
+ *   'ctrl+alt+KeyG': (e) => {
  *     e.preventDefault();
- *     alert("Control Alt G has been pressed");
+ *     alert('Control Alt G has been pressed');
  *   },
- *   "KeyG~KeyH": (e) => {
+ *   'KeyG~KeyH': (e) => {
  *     e.preventDefault();
- *     alert("G has been pressed quickly followed by H");
+ *     alert('G has been pressed quickly followed by H');
  *   },
- *   "?": (e) => {
+ *   '?': (e) => {
  *     setIsHelpVisible(true);
  *   }
  * }
@@ -61,33 +92,12 @@ export function useKeyboardShortcuts(
   eventTarget = window,
   options = {},
 ) {
+  const [storedShortcuts] = useState(shortcuts);
   const [keyChain, setKeyChain] = useState([]);
-  const [keyChainQueue, setKeyChainQueue] = useState(null);
   const [mergedOptions, setMergedOptions] = useState({
     ...defaultOptions,
     ...options,
   });
-
-  // Work out the correct shortcut for the key press
-  const callShortcut = useCallback(
-    (e, keys) => {
-      let shortcut;
-      if (keyChain.length > 0) {
-        shortcut = shortcuts[`${keyChain.join('~')}~${e.code}`];
-      } else {
-        shortcut =
-          shortcuts[`${keys}${e.code}`] ||
-          shortcuts[`${keys}${e.key.toLowerCase()}`];
-      }
-
-      // if a valid shortcut is found call it and reset the chain
-      if (shortcut) {
-        shortcut(e);
-        setKeyChain([]);
-      }
-    },
-    [shortcuts, keyChain],
-  );
 
   // update mergedOptions if options prop changes
   useEffect(() => {
@@ -97,53 +107,46 @@ export function useKeyboardShortcuts(
     setMergedOptions({ ...defaultOptions, ...newOptions });
   }, [options.timeout]);
 
-  // Set up key chains
+  // clear key chain after timeout is reached
   useEffect(() => {
-    if (!keyChainQueue && keyChain.length === 0) return;
-    let timeout;
+    if (keyChain.length <= 0) return;
 
-    timeout = window.setTimeout(() => {
+    const timeout = window.setTimeout(() => {
       clearTimeout(timeout);
       setKeyChain([]);
     }, mergedOptions.timeout);
 
-    if (keyChainQueue) {
-      setKeyChain([...keyChain, keyChainQueue]);
-      setKeyChainQueue(null);
-    }
-
     return () => clearTimeout(timeout);
-  }, [keyChain, keyChainQueue, mergedOptions.timeout]);
+  }, [keyChain.length, mergedOptions.timeout]);
 
   // set up event listeners
   useEffect(() => {
-    if (!shortcuts || Object.keys(shortcuts).length === 0) return;
+    if (!storedShortcuts || Object.keys(storedShortcuts).length === 0) return;
 
     const keyEvent = (e) => {
       if (e.defaultPrevented) return;
 
-      // Get special keys
-      const keys = `${e.ctrlKey || e.metaKey ? 'ctrl+' : ''}${
-        e.altKey ? 'alt+' : ''
-      }${(e.ctrlKey || e.metaKey || e.altKey) && e.shiftKey ? 'shift+' : ''}`;
+      const ctrlKeyEntry = e.ctrlKey ? 'ctrl+' : '';
+      const cmdKeyEntry = e.metaKey ? 'cmd+' : '';
+      const altKeyEntry = e.altKey ? 'alt+' : '';
+      const shiftKeyEntry = e.shiftKey ? 'shift+' : '';
+
+      // We build the special keys string in an opinionated order to ensure consistency
+      const keys = `${ctrlKeyEntry}${cmdKeyEntry}${altKeyEntry}${shiftKeyEntry}`;
 
       // If no special keys, except shift, are pressed and focus is inside a field return
       if (e.target instanceof Node && isFormField(e.target) && !keys) return;
 
-      // If a special key is pressed reset the key chain else add to the chain
-      if (keys) {
-        setKeyChain([]);
-      } else {
-        setKeyChainQueue(e.code);
-      }
+      const newChain = callShortcut(e, keys, keyChain, storedShortcuts);
 
-      callShortcut(e, keys);
+      // update keychain with latest chain
+      setKeyChain(newChain);
     };
 
-    eventTarget.addEventListener('keydown', keyEvent);
+    eventTarget?.addEventListener('keydown', keyEvent);
 
-    return () => eventTarget.removeEventListener('keydown', keyEvent);
-  }, [shortcuts, eventTarget, callShortcut]);
+    return () => eventTarget?.removeEventListener('keydown', keyEvent);
+  }, [keyChain, storedShortcuts, eventTarget]);
 }
 
 /**
@@ -152,9 +155,9 @@ export function useKeyboardShortcuts(
  *
  * @example
  * const shortcuts = {
- *   "ctrl+alt+KeyG": (e) => {
+ *   'ctrl+alt+KeyG': (e) => {
  *     e.preventDefault();
- *     alert("Control Alt G has been pressed")
+ *     alert('Control Alt G has been pressed')
  *   }
  * }
  *
@@ -177,7 +180,10 @@ KeyboardShortcuts.propTypes = {
   options: PropTypes.shape({
     timeout: PropTypes.number,
   }),
-  eventTarget: PropTypes.instanceOf(Element),
+  eventTarget: PropTypes.oneOfType([
+    PropTypes.instanceOf(Element),
+    PropTypes.instanceOf(Window),
+  ]),
 };
 
 KeyboardShortcuts.defaultProps = {

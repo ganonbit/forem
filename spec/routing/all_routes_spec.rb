@@ -1,8 +1,14 @@
 require "rails_helper"
 
-RSpec.describe "all routes", type: :routing do
+RSpec.describe "all routes" do
   let(:podcast)     { create(:podcast) }
   let(:user)        { create(:user) }
+
+  describe "#root_url" do
+    it "matches URL.url('/')" do
+      expect(root_url).to eq(URL.url("/"))
+    end
+  end
 
   it "renders a podcast index if there is a podcast with the slug successfully" do
     expect(get: "/#{podcast.slug}").to route_to(
@@ -34,14 +40,6 @@ RSpec.describe "all routes", type: :routing do
 
   context "when redirected routes" do
     include RSpec::Rails::RequestExampleGroup
-
-    it "redirects /shop to the default shop_url" do
-      # TODO: the hardcoded shop url needs to be removed from the routes in favor of a dynamic one.
-      allow(SiteConfig).to receive(:shop_url).and_return("https://shop.dev.to")
-      get shop_path
-
-      expect(response).to redirect_to(SiteConfig.shop_url)
-    end
 
     it "redirects /settings/integrations to /settings/extensions" do
       get user_settings_path(:integrations)

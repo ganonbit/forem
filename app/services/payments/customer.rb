@@ -55,7 +55,7 @@ module Payments
             source: source,
             amount: amount,
             description: description,
-            currency: "usd",
+            currency: I18n.t("services.payments.customer.usd"),
           )
         end
       end
@@ -65,14 +65,14 @@ module Payments
       def request
         yield
       rescue Stripe::InvalidRequestError => e
-        DatadogStatsClient.increment("stripe.errors", tags: ["error:InvalidRequestError"])
+        ForemStatsClient.increment("stripe.errors", tags: ["error:InvalidRequestError"])
         raise InvalidRequestError, e.message
       rescue Stripe::CardError => e
-        DatadogStatsClient.increment("stripe.errors", tags: ["error:CardError"])
+        ForemStatsClient.increment("stripe.errors", tags: ["error:CardError"])
         raise CardError, e.message
       rescue Stripe::StripeError => e
         Honeybadger.notify(e)
-        DatadogStatsClient.increment("stripe.errors", tags: ["error:StripeError"])
+        ForemStatsClient.increment("stripe.errors", tags: ["error:StripeError"])
         raise PaymentsError, e.message
       end
     end

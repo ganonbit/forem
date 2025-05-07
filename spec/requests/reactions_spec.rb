@@ -1,12 +1,12 @@
 require "rails_helper"
 
-RSpec.describe "Reactions", type: :request do
+RSpec.describe "Reactions" do
   let(:user)    { create(:user) }
   let(:article) { create(:article, user: user) }
   let(:comment) { create(:comment, commentable: article) }
 
-  let(:max_age) { 1.day.to_i }
-  let(:stale_if_error) { 26_400 }
+  let(:max_age) { 2.weeks.to_i }
+  let(:stale_if_error) { 1.day.to_i }
 
   describe "GET /reactions?article_id=:article_id" do
     before do
@@ -28,17 +28,20 @@ RSpec.describe "Reactions", type: :request do
           { "category" => "like", "count" => 1 },
           { "category" => "readinglist", "count" => 0 },
           { "category" => "unicorn", "count" => 0 },
+          { "category" => "exploding_head", "count" => 0 },
+          { "category" => "raised_hands", "count" => 0 },
+          { "category" => "fire", "count" => 0 },
         ]
-        expect(result["article_reaction_counts"]).to eq(expected_reactions_counts)
+        expect(result["article_reaction_counts"]).to match_array(expected_reactions_counts)
         expect(result["reactions"].to_json).to eq(user.reactions.where(reactable: article).to_json)
       end
 
       it "does not set Surrogate-Key cache control headers" do
-        expect(response.headers["Surrogate-Key"]).to eq(nil)
+        expect(response.headers["Surrogate-Key"]).to be_nil
       end
 
       it "does not set X-Accel-Expires headers" do
-        expect(response.headers["X-Accel-Expires"]).to eq(nil)
+        expect(response.headers["X-Accel-Expires"]).to be_nil
       end
 
       it "does not set Fastly cache control and surrogate control headers" do
@@ -60,8 +63,11 @@ RSpec.describe "Reactions", type: :request do
           { "category" => "like", "count" => 1 },
           { "category" => "readinglist", "count" => 0 },
           { "category" => "unicorn", "count" => 0 },
+          { "category" => "exploding_head", "count" => 0 },
+          { "category" => "raised_hands", "count" => 0 },
+          { "category" => "fire", "count" => 0 },
         ]
-        expect(result["article_reaction_counts"]).to eq(expected_reactions)
+        expect(result["article_reaction_counts"]).to match_array(expected_reactions)
         expect(result["reactions"]).to be_empty
       end
 
@@ -183,45 +189,119 @@ RSpec.describe "Reactions", type: :request do
         allow(rate_limiter).to receive(:limit_by_action).and_return(true)
         post "/reactions", params: article_params
 
-        expect(response.status).to eq(429)
+        expect(response).to have_http_status(:too_many_requests)
       end
     end
 
     context "when reacting to an article" do
       before do
         sign_in user
-        post "/reactions", params: article_params
       end
 
       it "creates reaction" do
-        expect(Reaction.last.reactable_id).to eq(article.id)
+        expect do
+          post "/reactions", params: article_params
+        end.to change(Reaction, :count).by(1)
       end
 
       it "destroys existing reaction" do
-        # same route to destroy, so sending POST request again
         post "/reactions", params: article_params
-        expect(Reaction.all.size).to eq(0)
+        expect do
+          # same route to destroy, so sending POST request again
+          post "/reactions", params: article_params
+        end.to change(Reaction, :count).by(-1)
+      end
+
+      it "has success http status" do
+        post "/reactions", params: article_params
+        expect(response).to be_successful
+      end
+
+      it "sends Algolia insight event" do
+        # Set up the expectation before making the request
+        allow(Settings::General).to receive_messages(algolia_application_id: "test", algolia_api_key: "test")
+        algolia_service_instance = instance_double(AlgoliaInsightsService)
+        allow(AlgoliaInsightsService).to receive(:new).and_return(algolia_service_instance)
+        allow(algolia_service_instance).to receive(:track_event)
+        post "/reactions", params: article_params
+        expect(algolia_service_instance).to have_received(:track_event).with(
+          "conversion",
+          "Reaction Created",
+          user.id,
+          article.id,
+          "Article_#{Rails.env}",
+          instance_of(Integer),
+          nil,
+          nil
+        )
       end
     end
 
     context "when creating readinglist" do
       before do
-        user.update_column(:experience_level, 8)
+        user.setting.update_column(:experience_level, 8)
         sign_in user
+      end
+
+      it "creates reaction" do
         post "/reactions", params: {
           reactable_id: article.id,
           reactable_type: "Article",
           category: "readinglist"
         }
-      end
 
-      it "creates reaction" do
         expect(Reaction.last.reactable_id).to eq(article.id)
       end
 
       it "creates rating vote" do
-        expect(RatingVote.last.context).to eq("readinglist_reaction")
-        expect(RatingVote.last.rating).to be(8.0)
+        post "/reactions", params: {
+          reactable_id: article.id,
+          reactable_type: "Article",
+          category: "readinglist"
+        }
+
+        rating_vote = RatingVote.last
+        expect(rating_vote.context).to eq("readinglist_reaction")
+        expect(rating_vote.rating).to be(8.0)
+      end
+
+      it "does not attempt to create a rating vote when the user's experience level is unset" do
+        user.setting.update_column(:experience_level, nil)
+        allow(RatingVote).to receive(:create)
+
+        post "/reactions", params: {
+          reactable_id: article.id,
+          reactable_type: "Article",
+          category: "readinglist"
+        }
+
+        expect(RatingVote).not_to have_received(:create)
+      end
+
+      it "has success http status" do
+        post "/reactions", params: {
+          reactable_id: article.id,
+          reactable_type: "Article",
+          category: "readinglist"
+        }
+        expect(response).to be_successful
+      end
+    end
+
+    context "when attempting to create thumbsup as regular user" do
+      before do
+        sign_in user
+      end
+
+      it "does not permit the action" do
+        expect do
+          post "/reactions", params: {
+            reactable_id: article.id,
+            reactable_type: "Article",
+            category: "thumbsup"
+          }
+        end.to raise_error(Pundit::NotAuthorizedError)
+        expect(Reaction.where(category: "thumbsup").count).to eq(0)
       end
     end
 
@@ -239,9 +319,18 @@ RSpec.describe "Reactions", type: :request do
           reactable_type: "Article",
           category: "thumbsup"
         }
-        expect(Reaction.where(category: "thumbsup").size).to be 1
-        expect(Reaction.where(category: "thumbsdown").size).to be 0
-        expect(Reaction.where(category: "like").size).to be 1
+        expect(Reaction.where(category: "thumbsup").count).to eq(1)
+        expect(Reaction.where(category: "thumbsdown").count).to eq(0)
+        expect(Reaction.where(category: "like").count).to eq(1)
+      end
+
+      it "has success http status" do
+        post "/reactions", params: {
+          reactable_id: article.id,
+          reactable_type: "Article",
+          category: "thumbsup"
+        }
+        expect(response).to be_successful
       end
     end
 
@@ -265,22 +354,38 @@ RSpec.describe "Reactions", type: :request do
         expect(Reaction.where(category: "like").size).to be 1
         expect(Reaction.where(category: "vomit").size).to be 1
       end
+
+      it "has success http status" do
+        post "/reactions", params: {
+          reactable_id: article.id,
+          reactable_type: "Article",
+          category: "thumbsdown"
+        }
+        expect(response).to be_successful
+      end
     end
 
     context "when vomiting on a user" do
       before do
         sign_in trusted_user
-        post "/reactions", params: user_params
       end
 
       it "creates reaction" do
-        expect(Reaction.last.reactable_id).to eq(user.id)
+        expect do
+          post "/reactions", params: user_params
+        end.to change(Reaction, :count).by(1)
       end
 
       it "destroys existing reaction" do
-        # same route to destroy, so sending POST request again
         post "/reactions", params: user_params
-        expect(Reaction.all.size).to eq(0)
+        expect do
+          post "/reactions", params: user_params
+        end.to change(Reaction, :count).by(-1)
+      end
+
+      it "has success http status" do
+        post "/reactions", params: user_params
+        expect(response).to be_successful
       end
     end
 
@@ -314,19 +419,10 @@ RSpec.describe "Reactions", type: :request do
         expect(reaction.category).to eq("like")
         expect(reaction.status).to eq("valid")
       end
-    end
 
-    context "when part of field test" do
-      before do
-        sign_in user
-        allow(Users::RecordFieldTestEventWorker).to receive(:perform_async)
-      end
-
-      it "converts field test" do
+      it "has success http status" do
         post "/reactions", params: article_params
-        expect(Users::RecordFieldTestEventWorker).to have_received(:perform_async).with(user.id,
-                                                                                        :follow_implicit_points,
-                                                                                        "user_creates_reaction")
+        expect(response).to be_successful
       end
     end
 

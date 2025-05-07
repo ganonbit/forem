@@ -1,10 +1,10 @@
 require "rails_helper"
 
-RSpec.describe "PodcastEpisodesSpec", type: :request do
+RSpec.describe "Podcast Episodes Index Spec" do
   describe "GET podcast episodes index" do
     it "renders page with proper sidebar" do
       get "/pod"
-      expect(response.body).to include("Suggest a Podcast")
+      expect(response.body).to include(I18n.t("views.podcasts.suggest_a_podcast"))
     end
 
     it "shows reachable podcasts" do
@@ -13,6 +13,18 @@ RSpec.describe "PodcastEpisodesSpec", type: :request do
       get "/pod"
       expect(response.body).to include("SuperMario")
       expect(response.body).not_to include("unreachable")
+    end
+
+    it "shows featured podcasts area if there are any" do
+      podcast = create(:podcast, featured: true, published: true)
+      create(:podcast_episode, title: "SuperMario", podcast: podcast)
+      get "/pod"
+      expect(response.body).to include(I18n.t("views.podcasts.featured_shows"))
+    end
+
+    it "does not show featured podcasts area if there are not any" do
+      get "/pod"
+      expect(response.body).not_to include(I18n.t("views.podcasts.featured_shows"))
     end
 
     it "sets proper surrogate key" do

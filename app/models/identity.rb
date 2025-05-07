@@ -1,3 +1,6 @@
+#  @note When we destroy the related user, it's using dependent:
+#        :delete for the relationship.  That means no before/after
+#        destroy callbacks will be called on this object.
 class Identity < ApplicationRecord
   belongs_to :user
 
@@ -12,7 +15,6 @@ class Identity < ApplicationRecord
   validates :uid, uniqueness: { scope: :provider }, if: proc { |identity|
                                                           identity.uid_changed? || identity.provider_changed?
                                                         }
-  validates :user_id, presence: true
   validates :user_id, uniqueness: { scope: :provider }, if: proc { |identity|
                                                               identity.user_id_changed? || identity.provider_changed?
                                                             }
@@ -39,6 +41,6 @@ class Identity < ApplicationRecord
   end
 
   def email
-    auth_data_dump.info.email
+    auth_data_dump&.info&.email || I18n.t("models.identity.no_email_msg", provider: provider)
   end
 end

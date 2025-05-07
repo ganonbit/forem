@@ -1,6 +1,8 @@
+#  @note When we destroy the related user, it's using dependent:
+#        :delete for the relationship.  That means no before/after
+#        destroy callbacks will be called on this object.
 class BadgeAchievement < ApplicationRecord
-  CONTEXT_MESSAGE_ALLOWED_TAGS = %w[strong em i b u a code].freeze
-  CONTEXT_MESSAGE_ALLOWED_ATTRIBUTES = %w[href name].freeze
+  resourcify
 
   belongs_to :user
   belongs_to :badge
@@ -12,7 +14,7 @@ class BadgeAchievement < ApplicationRecord
 
   counter_culture :user, column_name: "badge_achievements_count"
 
-  validates :badge_id, uniqueness: { scope: :user_id }
+  validates :badge_id, uniqueness: { scope: :user_id, if: :single_award_badge? }
 
   before_validation :render_rewarding_context_message_html
   after_create :award_credits
@@ -24,12 +26,12 @@ class BadgeAchievement < ApplicationRecord
   def render_rewarding_context_message_html
     return unless rewarding_context_message_markdown
 
-    parsed_markdown = MarkdownParser.new(rewarding_context_message_markdown)
+    parsed_markdown = MarkdownProcessor::Parser.new(rewarding_context_message_markdown)
     html = parsed_markdown.finalize
     final_html = ActionController::Base.helpers.sanitize(
       html,
-      tags: CONTEXT_MESSAGE_ALLOWED_TAGS,
-      attributes: CONTEXT_MESSAGE_ALLOWED_ATTRIBUTES,
+      tags: MarkdownProcessor::AllowedTags::BADGE_ACHIEVEMENT_CONTEXT_MESSAGE,
+      attributes: MarkdownProcessor::AllowedAttributes::BADGE_ACHIEVEMENT_CONTEXT_MESSAGE,
     )
 
     self.rewarding_context_message = final_html
@@ -41,12 +43,18 @@ class BadgeAchievement < ApplicationRecord
 
   def send_email_notification
     return unless user.is_a?(User)
-    return unless user.email && user.email_badge_notifications
+    return unless user.email && user.notification_setting.email_badge_notifications
 
     BadgeAchievements::SendEmailNotificationWorker.perform_async(id)
   end
 
   def award_credits
-    Credit.add_to(user, 5)
+    return if badge.credits_awarded.zero?
+
+    Credit.add_to(user, badge.credits_awarded)
+  end
+
+  def single_award_badge?
+    badge&.allow_multiple_awards == false
   end
 end

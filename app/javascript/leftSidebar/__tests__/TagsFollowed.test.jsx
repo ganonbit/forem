@@ -1,6 +1,7 @@
 import { h } from 'preact';
 import { render } from '@testing-library/preact';
 import { axe } from 'jest-axe';
+import '@testing-library/jest-dom';
 import { TagsFollowed } from '..';
 
 const getTags = () => [
@@ -39,17 +40,16 @@ describe('<TagsFollowed />', () => {
   });
 
   it('should render the empty view when no tags are passed in', () => {
-    const { getByTestId } = render(<TagsFollowed tags={[]} />);
-    const followedTagsWrapper = getByTestId('followed-tags');
+    const { container } = render(<TagsFollowed tags={[]} />);
 
-    expect(followedTagsWrapper.textContent).toEqual('');
+    expect(container).toBeEmptyDOMElement();
   });
 
   it('should render the tags followed when tags are passed in', () => {
     const { queryByTitle } = render(<TagsFollowed tags={getTags()} />);
 
-    expect(queryByTitle('javascript tag')).toBeDefined();
-    expect(queryByTitle('webdev tag')).toBeDefined();
-    expect(queryByTitle('react tag')).toBeDefined();
+    expect(queryByTitle('javascript tag')).toExist();
+    expect(queryByTitle('webdev tag')).toExist();
+    expect(queryByTitle('react tag')).toExist();
   });
 });

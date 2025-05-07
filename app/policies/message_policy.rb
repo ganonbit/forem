@@ -1,15 +1,13 @@
 class MessagePolicy < ApplicationPolicy
   def create?
-    !user_is_banned?
+    !user.spam_or_suspended?
   end
 
   def destroy?
-    user_is_sender?
+    user_sender?
   end
 
-  def update?
-    destroy?
-  end
+  alias update? destroy?
 
   def permitted_attributes_for_update
     %i[message_markdown]
@@ -17,7 +15,7 @@ class MessagePolicy < ApplicationPolicy
 
   private
 
-  def user_is_sender?
+  def user_sender?
     record.user_id == user.id
   end
 end

@@ -2,8 +2,25 @@ module Admin
   class PodcastsController < Admin::ApplicationController
     layout "admin"
 
-    before_action :find_podcast, only: %i[edit update fetch remove_admin add_admin]
-    before_action :find_user, only: %i[remove_admin add_admin]
+    before_action :find_podcast, only: %i[edit update fetch add_owner]
+    PODCAST_ALLOWED_PARAMS = %i[
+      title
+      feed_url
+      description
+      itunes_url
+      overcast_url
+      android_url
+      soundcloud_url
+      website_url
+      twitter_username
+      pattern_image
+      main_color_hex
+      slug
+      image
+      featured
+      reachable
+      published
+    ].freeze
 
     def index
       @podcasts = Podcast.left_outer_joins(:podcast_episodes)
@@ -16,11 +33,13 @@ module Admin
       @podcasts = @podcasts.where("podcasts.title ILIKE :search", search: "%#{params[:search]}%")
     end
 
-    def edit; end
+    def edit
+      @podcast_ownership = Podcast.find(params[:id])
+    end
 
     def update
       if @podcast.update(podcast_params)
-        redirect_to admin_podcasts_path, notice: "Podcast updated"
+        redirect_to admin_podcasts_path, notice: I18n.t("admin.podcasts_controller.updated")
       else
         render :edit
       end
@@ -28,27 +47,20 @@ module Admin
 
     def fetch
       limit = params[:limit].to_i.zero? ? nil : params[:limit].to_i
-      force = params[:force].to_i == 1
-      Podcasts::GetEpisodesWorker.perform_async(podcast_id: @podcast.id, limit: limit, force: force)
-      flash[:notice] = "Podcast's episodes fetching was scheduled (#{@podcast.title}, ##{@podcast.id})"
+      force_update = params[:force].to_i == 1
+      Podcasts::GetEpisodesWorker.perform_async("podcast_id" => @podcast.id, "limit" => limit,
+                                                "force_update" => force_update)
+      flash[:notice] =
+        I18n.t("admin.podcasts_controller.scheduled", title: @podcast.title, id: @podcast.id)
       redirect_to admin_podcasts_path
     end
 
-    def remove_admin
-      removed_roles = @user.remove_role(:podcast_admin, @podcast)
-      if removed_roles.empty?
-        redirect_to edit_admin_podcast_path(@podcast), notice: "Error"
+    def add_owner
+      @podcast_ownership = @podcast.podcast_ownerships.build(user_id: params["podcast"]["user_id"])
+      if @podcast_ownership.save
+        redirect_to admin_podcasts_path, notice: I18n.t("admin.podcasts_controller.new_owner_added")
       else
-        redirect_to admin_podcasts_path, notice: "Removed admin"
-      end
-    end
-
-    def add_admin
-      role = @user.add_role(:podcast_admin, @podcast)
-      if role.persisted?
-        redirect_to admin_podcasts_path, notice: "Added admin"
-      else
-        redirect_to edit_admin_podcast_path(@podcast), notice: "Error"
+        redirect_to edit_admin_podcast_path(@podcast), notice: @podcast_ownership.errors_as_sentence
       end
     end
 
@@ -60,28 +72,13 @@ module Admin
 
     def find_user
       @user = User.find_by(id: params[:podcast][:user_id])
-      redirect_to edit_admin_podcast_path(@podcast), notice: "No such user" unless @user
+      return if @user
+
+      redirect_to edit_admin_podcast_path(@podcast), notice: I18n.t("admin.podcasts_controller.no_such_user")
     end
 
     def podcast_params
-      allowed_params = %i[
-        title
-        feed_url
-        description
-        itunes_url
-        overcast_url
-        android_url
-        soundcloud_url
-        website_url
-        twitter_username
-        pattern_image
-        main_color_hex
-        slug
-        image
-        reachable
-        published
-      ]
-      params.require(:podcast).permit(allowed_params)
+      params.require(:podcast).permit(PODCAST_ALLOWED_PARAMS)
     end
   end
 end

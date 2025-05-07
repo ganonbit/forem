@@ -1,11 +1,11 @@
 require "rails_helper"
 
-RSpec.describe "VideoStatesUpdate", type: :request do
+RSpec.describe "VideoStatesUpdate" do
   let(:encoder_key) { "TEST_SECRET" }
   let(:article) { create(:article, video_code: "DUMMY_VID_CODE") }
 
   before do
-    allow(SiteConfig).to receive(:video_encoder_key).and_return(encoder_key)
+    allow(Settings::General).to receive(:video_encoder_key).and_return(encoder_key)
   end
 
   describe "POST /video_states" do

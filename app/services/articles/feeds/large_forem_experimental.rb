@@ -1,76 +1,47 @@
 module Articles
   module Feeds
     class LargeForemExperimental
-      RANDOM_OFFSET_VALUES = [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 3, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].freeze
-      MINIMUM_SCORE_LATEST_FEED = -20
-
-      def initialize(user: nil, number_of_articles: 35, page: 1, tag: nil)
+      def initialize(user: nil, number_of_articles: Article::DEFAULT_FEED_PAGINATION_WINDOW_SIZE, page: 1, tag: nil)
         @user = user
         @number_of_articles = number_of_articles
         @page = page
         @tag = tag
-        @randomness = 3 # default number for randomly adjusting feed
-        @tag_weight = 1 # default weight tags play in rankings
-        @comment_weight = 0 # default weight comments play in rankings
-        @experience_level_weight = 1 # default weight for user experience level
-      end
-
-      def self.find_featured_story(stories)
-        featured_story =  if stories.is_a?(ActiveRecord::Relation)
-                            stories.where.not(main_image: nil).first
-                          else
-                            stories.detect { |story| story.main_image.present? }
-                          end
-        featured_story || Article.new
-      end
-
-      def find_featured_story(stories)
-        self.class.find_featured_story(stories)
-      end
-
-      def published_articles_by_tag
-        articles = Article.published.limited_column_select
-          .includes(top_comments: :user)
-          .page(@page).per(@number_of_articles)
-        articles = articles.cached_tagged_with(@tag) if @tag.present? # More efficient than tagged_with
-        articles
-      end
-
-      # Timeframe values from Timeframe::DATETIMES
-      def top_articles_by_timeframe(timeframe:)
-        published_articles_by_tag.where("published_at > ?", Timeframe.datetime(timeframe))
-          .order(score: :desc).page(@page).per(@number_of_articles)
+        @article_score_applicator = Articles::Feeds::ArticleScoreCalculatorForUser.new(user: user)
       end
 
       def default_home_feed(user_signed_in: false)
-        _featured_story, stories = default_home_feed_and_featured_story(user_signed_in: user_signed_in, ranking: true)
+        _featured_story, stories = featured_story_and_default_home_feed(user_signed_in: user_signed_in, ranking: true)
         stories
       end
 
-      def latest_feed
-        published_articles_by_tag.order(published_at: :desc)
-          .where("score > ?", MINIMUM_SCORE_LATEST_FEED)
-          .page(@page).per(@number_of_articles)
-      end
-
-      def default_home_feed_and_featured_story(user_signed_in: false, ranking: true)
-        featured_story, hot_stories = globally_hot_articles(user_signed_in)
+      # @param user_signed_in [Boolean] are we treating this as an
+      #        anonymous user?
+      # @param ranking [Boolean] if true, apply a ranking algorithm
+      # @param must_have_main_image [Boolean] if true, the featured
+      #        story must have a main image
+      #
+      # @note the must_have_main_image parameter name matches PR #15240
+      def featured_story_and_default_home_feed(user_signed_in: false, ranking: true, must_have_main_image: true)
+        featured_story, hot_stories = globally_hot_articles(user_signed_in, must_have_main_image: must_have_main_image)
         hot_stories = rank_and_sort_articles(hot_stories) if @user && ranking
         [featured_story, hot_stories]
       end
 
-      def more_comments_minimal_weight
-        @comment_weight = 0.2
-        _featured_story, stories = default_home_feed_and_featured_story(user_signed_in: true)
-        stories
+      # Adding an alias to preserve public method signature.
+      # Eventually, we should be able to remove the alias.
+      alias default_home_feed_and_featured_story featured_story_and_default_home_feed
+
+      def more_comments_minimal_weight_randomized
+        _featured_story, stories = featured_story_and_default_home_feed(user_signed_in: true)
+        first_quarter(stories).shuffle + last_three_quarters(stories)
       end
 
-      def more_comments_minimal_weight_randomized_at_end
-        @randomness = 0
-        results = more_comments_minimal_weight
-        first_half(results).shuffle + last_half(results)
-      end
+      # Adding an alias to preserve public method signature.  However,
+      # in this code base there are no further references of
+      # :more_comments_minimal_weight_randomized_at_end
+      alias more_comments_minimal_weight_randomized_at_end more_comments_minimal_weight_randomized
 
+      # @api private
       def rank_and_sort_articles(articles)
         ranked_articles = articles.each_with_object({}) do |article, result|
           article_points = score_single_article(article)
@@ -80,90 +51,73 @@ module Articles
         ranked_articles.to(@number_of_articles - 1)
       end
 
-      def score_single_article(article)
-        article_points = 0
+      # @api private
+      def score_single_article(article, base_article_points: 0)
+        article_points = base_article_points
         article_points += score_followed_user(article)
         article_points += score_followed_organization(article)
         article_points += score_followed_tags(article)
-        article_points += score_randomness
-        article_points += score_language(article)
         article_points += score_experience_level(article)
         article_points += score_comments(article)
         article_points
       end
 
-      def score_followed_user(article)
-        user_following_users_ids.include?(article.user_id) ? 1 : 0
-      end
+      delegate(:score_followed_user,
+               :score_followed_tags,
+               :score_followed_organization,
+               :score_experience_level,
+               :score_comments,
+               to: :@article_score_applicator)
 
-      def score_followed_tags(article)
-        return 0 unless @user
-
-        article_tags = article.decorate.cached_tag_list_array
-        user_followed_tags.sum do |tag|
-          article_tags.include?(tag.name) ? tag.points * @tag_weight : 0
-        end
-      end
-
-      def score_followed_organization(article)
-        user_following_org_ids.include?(article.organization_id) ? 1 : 0
-      end
-
-      def score_randomness
-        rand(3) * @randomness
-      end
-
-      def score_language(article)
-        @user&.preferred_languages_array&.include?(article.language || "en") ? 1 : -15
-      end
-
-      def score_experience_level(article)
-        - (((article.experience_level_rating - (@user&.experience_level || 5)).abs / 2) * @experience_level_weight)
-      end
-
-      def score_comments(article)
-        article.comments_count * @comment_weight
-      end
-
-      def globally_hot_articles(user_signed_in)
-        hot_stories = published_articles_by_tag
-          .where("score >= ? OR featured = ?", SiteConfig.home_feed_minimum_score, true)
-          .order(hotness_score: :desc)
-        featured_story = hot_stories.where.not(main_image: nil).first
+      # @api private
+      # rubocop:disable Layout/LineLength
+      def globally_hot_articles(user_signed_in, must_have_main_image: true, article_score_threshold: -15, min_rand_limit: 15, max_rand_limit: 80)
+        # rubocop:enable Layout/LineLength
         if user_signed_in
-          hot_story_count = hot_stories.count
-          offset = RANDOM_OFFSET_VALUES.select do |i|
-            i < hot_story_count
-          end.sample # random offset, weighted more towards zero
-          hot_stories = hot_stories.offset(offset)
-          new_stories = Article.published
-            .where("score > ?", -15)
-            .limited_column_select.includes(top_comments: :user).order(published_at: :desc).limit(rand(15..80))
+          hot_stories = experimental_hot_story_grab
+          hot_stories = hot_stories.not_authored_by(UserBlock.cached_blocked_ids_for_blocker(@user.id))
+          featured_story = featured_story_from(stories: hot_stories, must_have_main_image: must_have_main_image)
+          new_stories = Article.published.from_subforem
+            .where("score > ?", article_score_threshold)
+            .limited_column_select.includes(top_comments: :user)
+            .order(published_at: :desc)
+            .includes(:distinct_reaction_categories, :subforem)
+            .limit(rand(min_rand_limit..max_rand_limit))
           hot_stories = hot_stories.to_a + new_stories.to_a
+        else
+          hot_stories = Article.published.from_subforem.limited_column_select
+            .includes(:distinct_reaction_categories, :subforem)
+            .page(@page).per(@number_of_articles)
+            .with_at_least_home_feed_minimum_score
+            .order(hotness_score: :desc)
+          featured_story = featured_story_from(stories: hot_stories, must_have_main_image: must_have_main_image)
         end
         [featured_story, hot_stories.to_a]
       end
 
       private
 
-      def user_followed_tags
-        @user_followed_tags ||= (@user&.decorate&.cached_followed_tags || [])
+      def featured_story_from(stories:, must_have_main_image:)
+        return stories.first unless must_have_main_image
+
+        stories.where.not(main_image: nil).first
       end
 
-      def user_following_org_ids
-        @user_following_org_ids ||= (@user&.cached_following_organizations_ids || [])
+      def experimental_hot_story_grab
+        start_time = Articles::Feeds.oldest_published_at_to_consider_for(user: @user)
+        Article.published.limited_column_select.includes(top_comments: :user)
+          .includes(:distinct_reaction_categories, :subforem)
+          .where("published_at > ?", start_time)
+          .page(@page).per(@number_of_articles)
+          .order(score: :desc)
       end
 
-      def user_following_users_ids
-        @user_following_users_ids ||= (@user&.cached_following_users_ids || [])
+      def first_quarter(array)
+        array[0...(array.length / 4)]
       end
 
-      def first_half(array)
-        array[0...(array.length / 2)]
-      end
-
-      def last_half(array)
-        array[(array.length / 2)..array.length]
+      def last_three_quarters(array)
+        array[(array.length / 4)..array.length]
       end
     end
   end

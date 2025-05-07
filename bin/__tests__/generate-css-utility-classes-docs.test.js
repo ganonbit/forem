@@ -46,14 +46,13 @@ describe('generateUtilityClassesDocumentation', () => {
           >color</a> set to <code>red</code>
         </li>
       </ul>
-${'      '}
       <pre><code>{\`.color-some-utility-class {
   color: red;
 }
 \`}</code></pre>
     </div>
 
-    _color_some_utility_class.story = { name: 'color-some-utility-class' };
+    _color_some_utility_class.storyName = 'color-some-utility-class';
     `;
     const styleSheet = {
       cssRules: [
@@ -61,7 +60,6 @@ ${'      '}
           style: {
             0: 'color',
             length: 1,
-            _importants: {},
             color: 'red',
           },
           selectorText: '.color-some-utility-class',
@@ -103,7 +101,6 @@ ${'      '}
           >opacity</a> set to <code>0.5</code>
         </li>
       </ul>
-${'      '}
       <pre><code>{\`.color-some-utility-class {
   color: red;
   opacity: 0.5;
@@ -111,7 +108,7 @@ ${'      '}
 \`}</code></pre>
     </div>
 
-    _color_some_utility_class.story = { name: 'color-some-utility-class' };
+    _color_some_utility_class.storyName = 'color-some-utility-class';
     `;
     const styleSheet = {
       cssRules: [
@@ -120,7 +117,6 @@ ${'      '}
             0: 'color',
             1: 'opacity',
             length: 2,
-            _importants: {},
             color: 'red',
             opacity: '0.5',
           },
@@ -138,7 +134,7 @@ ${'      '}
     expect(files[filePath]).toEqual(expected);
   });
 
-  it('should generate a Storybook story file when CSS utility classes have !important in values', () => {
+  it('should generate a Storybook story file with CSS utility classes', () => {
     const expected = `  // This is an auto-generated file. DO NOT EDIT
     import { h } from 'preact';
     import '../../crayons/storybook-utilities/designSystem.scss';
@@ -157,14 +153,13 @@ ${'      '}
           >color</a> set to <code>red</code>
         </li>
       </ul>
-      <p>Note that <code>!important</code> is being used to override pre-design system CSS.</p>
       <pre><code>{\`.color-some-utility-class {
   color: red;
 }
 \`}</code></pre>
     </div>
 
-    _color_some_utility_class.story = { name: 'color-some-utility-class' };
+    _color_some_utility_class.storyName = 'color-some-utility-class';
     `;
     const styleSheet = {
       cssRules: [
@@ -172,7 +167,6 @@ ${'      '}
           style: {
             0: 'color',
             length: 1,
-            _importants: { color: 'important' },
             color: 'red',
           },
           selectorText: '.color-some-utility-class',
@@ -208,14 +202,13 @@ ${'      '}
           >color</a> set to <code>red</code>
         </li>
       </ul>
-${'      '}
       <pre><code>{\`.color-some-utility-class {
   color: red;
 }
 \`}</code></pre>
     </div>
 
-    _color_some_utility_class.story = { name: 'color-some-utility-class' };
+    _color_some_utility_class.storyName = 'color-some-utility-class';
     `;
     const styleSheet = {
       cssRules: [
@@ -223,7 +216,6 @@ ${'      '}
           style: {
             0: 'color',
             length: 1,
-            _importants: {},
             color: 'red',
           },
           selectorText: '.color-some-utility-class',
@@ -233,7 +225,6 @@ ${'      '}
           style: {
             0: 'width',
             length: 1,
-            _importants: {},
           },
           media: 'some-media-rule',
         },

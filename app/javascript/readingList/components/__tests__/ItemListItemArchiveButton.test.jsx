@@ -1,5 +1,5 @@
 import { h } from 'preact';
-import { render, fireEvent } from '@testing-library/preact';
+import { render } from '@testing-library/preact';
 import { axe } from 'jest-axe';
 import { ItemListItemArchiveButton } from '../ItemListItemArchiveButton';
 
@@ -16,19 +16,6 @@ describe('<ItemListItemArchiveButton />', () => {
       <ItemListItemArchiveButton text="archive" />,
     );
 
-    expect(queryByText(/archive/i)).toBeDefined();
-  });
-
-  it('triggers the onClick if the Enter key is pressed', () => {
-    const onClick = jest.fn();
-    const { getByRole } = render(
-      <ItemListItemArchiveButton text="archive" onClick={onClick} />,
-    );
-
-    fireEvent.keyUp(getByRole('button'), { key: 'Enter', code: 'Enter' });
-    expect(onClick).toHaveBeenCalledTimes(1);
-
-    fireEvent.keyUp(getByRole('button'), { key: 'Space', code: 'Space' });
-    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(queryByText(/archive/i)).toExist();
   });
 });

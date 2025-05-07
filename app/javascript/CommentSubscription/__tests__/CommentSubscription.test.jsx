@@ -1,5 +1,6 @@
 import { h } from 'preact';
-import { render } from '@testing-library/preact';
+import { render, waitFor } from '@testing-library/preact';
+import '@testing-library/jest-dom';
 import { axe } from 'jest-axe';
 import {
   CommentSubscription,
@@ -54,7 +55,7 @@ describe('<CommentSubscription />', () => {
   it('should subscribe when the subscribe button is pressed', () => {
     const onSubscribe = jest.fn();
     const { getByText } = render(
-      <CommentSubscription onSubscribe={onSubscribe} />,
+      <CommentSubscription onSubscribe={onSubscribe} isLoggedIn={true} />,
     );
 
     const button = getByText(/subscribe/i, { selector: 'button' });
@@ -69,6 +70,7 @@ describe('<CommentSubscription />', () => {
       <CommentSubscription
         subscriptionType={COMMENT_SUBSCRIPTION_TYPE.AUTHOR}
         onUnsubscribe={onUnsubscribe}
+        isLoggedIn={true}
       />,
     );
 
@@ -76,35 +78,6 @@ describe('<CommentSubscription />', () => {
     unsubscribeButton.click();
 
     expect(onUnsubscribe).toHaveBeenCalled();
-  });
-
-  it('should hide subscription options when the Done button is clicked', async () => {
-    const onSubscribe = jest.fn();
-    const { getByTestId, getByText, findByTestId } = render(
-      <CommentSubscription
-        onSubscribe={onSubscribe}
-        subscriptionType={COMMENT_SUBSCRIPTION_TYPE.AUTHOR}
-      />,
-    );
-
-    let subscriptionPanel = await findByTestId('subscriptions-panel');
-
-    // Panel is hidden
-    expect(subscriptionPanel.getAttribute('aria-hidden')).toEqual('true');
-
-    const cogButton = getByTestId('subscription-settings');
-    cogButton.click();
-
-    subscriptionPanel = await findByTestId('subscriptions-panel');
-
-    expect(subscriptionPanel.getAttribute('aria-hidden')).toEqual('false');
-
-    const doneButton = getByText(/done/i);
-    doneButton.click();
-
-    subscriptionPanel = await findByTestId('subscriptions-panel');
-
-    expect(subscriptionPanel.getAttribute('aria-hidden')).toEqual('true');
   });
 
   it('should update comment subscription when the done button is clicked in the subscription options panel', async () => {
@@ -124,11 +97,15 @@ describe('<CommentSubscription />', () => {
       /^Post author comments/i,
     );
     onlyAuthorCommentsRadioButton.click();
+    expect(onlyAuthorCommentsRadioButton).toBeChecked();
 
     const doneButton = getByText(/done/i);
     doneButton.click();
 
-    expect(onlyAuthorCommentsRadioButton.checked).toEqual(true);
-    expect(onSubscribe).toHaveBeenCalledWith(COMMENT_SUBSCRIPTION_TYPE.AUTHOR);
+    waitFor(() =>
+      expect(onSubscribe).toHaveBeenCalledWith(
+        COMMENT_SUBSCRIPTION_TYPE.AUTHOR,
+      ),
+    );
   });
 });

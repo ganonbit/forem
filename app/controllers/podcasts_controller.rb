@@ -6,6 +6,10 @@ class PodcastsController < ApplicationController
   around_action :skip_bullet, only: %i[create], if: -> { defined?(Bullet) }
 
   IMAGE_KEYS = %w[image pattern_image].freeze
+  PODCASTS_ALLOWED_PARAMS = %i[
+    android_url image itunes_url main_color_hex overcast_url pattern_image
+    slug soundcloud_url twitter_username website_url title feed_url description
+  ].freeze
 
   def new
     @podcast = Podcast.new
@@ -24,7 +28,7 @@ class PodcastsController < ApplicationController
 
     if @podcast.save
       current_user.add_role(:podcast_admin, @podcast) if added_by_owner?
-      flash[:global_notice] = "Podcast suggested"
+      flash[:global_notice] = I18n.t("podcasts_controller.podcast_suggested")
 
       redirect_to pod_path
     else
@@ -42,11 +46,7 @@ class PodcastsController < ApplicationController
   end
 
   def podcast_params
-    allowed_params = %i[
-      android_url image itunes_url main_color_hex overcast_url pattern_image
-      slug soundcloud_url twitter_username website_url title feed_url description
-    ]
-    params.require(:podcast).permit(allowed_params)
+    params.require(:podcast).permit(PODCASTS_ALLOWED_PARAMS)
   end
 
   def skip_bullet
@@ -74,10 +74,10 @@ class PodcastsController < ApplicationController
 
   def valid_image_files_and_names?(images)
     images.each do |field, image|
-      @podcast.errors.add(field, IS_NOT_FILE_MESSAGE) unless file?(image)
+      @podcast.errors.add(field, is_not_file_message) unless file?(image)
       break if @podcast.errors.any?
 
-      @podcast.errors.add(field, FILENAME_TOO_LONG_MESSAGE) if long_filename?(image)
+      @podcast.errors.add(field, filename_too_long_message) if long_filename?(image)
     end
 
     @podcast.errors.blank?

@@ -1,12 +1,12 @@
 module Users
   class SubscribeToMailchimpNewsletterWorker
-    include Sidekiq::Worker
+    include Sidekiq::Job
     sidekiq_options queue: :low_priority, retry: 10, lock: :until_executed
 
     def perform(user_id)
       user = User.find_by(id: user_id)
 
-      MailchimpBot.new(user).upsert if user
+      Mailchimp::Bot.new(user).upsert if user&.email
     end
   end
 end

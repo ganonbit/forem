@@ -8,22 +8,36 @@ RSpec.describe Reactions::BustReactableCacheWorker, type: :worker do
     let(:comment) { create(:comment, commentable: article) }
     let(:comment_reaction) { create(:reaction, reactable: comment, user: user) }
     let(:worker) { subject }
+    let(:cache_bust) { instance_double(EdgeCache::Bust) }
 
     before do
-      allow(CacheBuster).to receive(:bust)
+      allow(EdgeCache::BustArticle).to receive(:call)
+      allow(EdgeCache::Bust).to receive(:new).and_return(cache_bust)
+      allow(cache_bust).to receive(:call)
     end
 
     it "busts the reactable article cache" do
       worker.perform(reaction.id)
-      expect(CacheBuster).to have_received(:bust).with(user.path).once
-      expect(CacheBuster).to have_received(:bust).with("/reactions?article_id=#{article.id}").once
+      expect(cache_bust).to have_received(:call).with(user.path).once
+      expect(cache_bust).to have_received(:call).with("/reactions?article_id=#{article.id}").once
+    end
+
+    it "busts the article if there were previously no reactions" do
+      worker.perform(reaction.id)
+      expect(EdgeCache::BustArticle).to have_received(:call)
+    end
+
+    it "does not bust the article if there were previously one reactions" do
+      create(:reaction, reactable: article, user: create(:user))
+      worker.perform(reaction.id)
+      expect(EdgeCache::BustArticle).not_to have_received(:call)
     end
 
     it "busts the reactable comment cache" do
       worker.perform(comment_reaction.id)
-      expect(CacheBuster).to have_received(:bust).with(user.path).once
+      expect(cache_bust).to have_received(:call).with(user.path).once
       param = "/reactions?commentable_id=#{article.id}&commentable_type=Article"
-      expect(CacheBuster).to have_received(:bust).with(param).once
+      expect(cache_bust).to have_received(:call).with(param).once
     end
 
     it "doesn't fail if a reaction doesn't exist" do

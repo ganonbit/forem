@@ -1,45 +1,82 @@
 # Utilities methods to safely build app wide URLs
 module URL
-  SERVICE_WORKER = "/serviceworker.js".freeze
-
   def self.protocol
     ApplicationConfig["APP_PROTOCOL"]
   end
 
-  def self.domain
-    if Rails.application&.initialized? && SiteConfig.respond_to?(:app_domain)
-      SiteConfig.app_domain
+  def self.database_available?
+    ActiveRecord::Base.connected? && has_site_configs?
+  end
+
+  private_class_method :database_available?
+
+  def self.has_site_configs?
+    @has_site_configs ||= ActiveRecord::Base.connection.table_exists?("site_configs")
+  end
+
+  private_class_method :has_site_configs?
+
+  def self.domain(subforem = nil)
+    if subforem
+      subforem.domain
+    elsif database_available?
+      Settings::General.app_domain
     else
       ApplicationConfig["APP_DOMAIN"]
     end
   end
 
-  def self.url(uri = nil)
-    base_url = "#{protocol}#{domain}"
+  def self.url(uri = nil, subforem = nil)
+    base_url = "#{protocol}#{domain(subforem)}"
+    base_url += ":3000" if Rails.env.development? && !base_url.include?(":3000")
     return base_url unless uri
-
-    URI.parse(base_url).merge(uri).to_s
+    Addressable::URI.parse(base_url).join(uri).normalize.to_s
   end
 
   # Creates an article URL
   #
   # @param article [Article] the article to create the URL for
   def self.article(article)
-    url(article.path)
+    subforem = article.subforem || Subforem.find_by(id: RequestStore.store[:default_subforem_id]) if article.respond_to?(:subforem_id)
+    url(article.path, subforem)
+  end
+
+  def self.page(page)
+    subforem = page.subforem || Subforem.find_by(id: RequestStore.store[:subforem_id])
+    url(page.path, subforem)
   end
 
   # Creates a comment URL
   #
   # @param comment [Comment] the comment to create the URL for
   def self.comment(comment)
-    url(comment.path)
+    subforem =  if comment.commentable.class.name == "Article" && comment.commentable.respond_to?(:subforem_id)
+                  comment.commentable.subforem || Subforem.find_by(id: RequestStore.store[:default_subforem_id])
+                else
+                  Subforem.find_by(id: RequestStore.store[:subforem_id])
+                end
+    url(comment.path, subforem)
+  end
+
+  # Creates a fragment URL for a comment on an article page
+  # if an article path is available
+  #
+  # @param comment [Comment] the comment to create the URL for
+  # @param path [String, nil] the path of the article to anchor the
+  #   comment link instead of using the comment's permalink
+  def self.fragment_comment(comment, path:)
+    return comment(comment) if path.nil?
+
+    url("#{path}#comment-#{comment.id_code}")
   end
 
   # Creates a reaction URL
   #
   # A reaction URL is the URL of its reactable.
   #
-  # @param reactable [Reaction] the reaction to create the URL for
+  # @param reaction [Reaction, #reactable] the reaction to create the URL for
+  # @return [String]
+  # @see .url
   def self.reaction(reaction)
     url(reaction.reactable.path)
   end
@@ -48,7 +85,11 @@ module URL
   #
   # @param tag [Tag] the tag to create the URL for
   def self.tag(tag, page = 1)
-    url(["/t/#{tag.name}", ("/page/#{page}" if page > 1)].join)
+    url([tag_path(tag), ("/page/#{page}" if page > 1)].join)
+  end
+
+  def self.tag_path(tag)
+    "/t/#{CGI.escape(tag.name)}"
   end
 
   # Creates a user URL
@@ -69,22 +110,17 @@ module URL
     ActionController::Base.helpers.image_url(image_name, host: host)
   end
 
-  def self.organization(organization)
-    url(organization.slug)
+  # Creates a deep link URL (for mobile) to a page in the current Forem and it
+  # relies on a UDL server to bounce back mobile users to the local `/r/mobile`
+  # fallback page. More details here: https://github.com/forem/udl-server
+  #
+  # @param path [String] the target path to deep link
+  def self.deep_link(path)
+    target_path = CGI.escape(url("/r/mobile?deep_link=#{path}"))
+    "https://udl.forem.com/?r=#{target_path}"
   end
 
-  # Ensures we don't consider serviceworker.js as referer
-  #
-  # @param referer [String] the unsanitized referer
-  # @example A safe referer
-  #  sanitized_referer("/some/path") #=> "/some/path"
-  # @example serviceworker.js as referer
-  #  sanitized_referer("serviceworker.js") #=> nil
-  # @example An empty string
-  #  sanitized_referer("") #=> nil
-  def self.sanitized_referer(referer)
-    return if referer.blank? || URI(referer).path == SERVICE_WORKER
-
-    referer
+  def self.organization(organization)
+    url(organization.slug)
   end
 end

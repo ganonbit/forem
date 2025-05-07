@@ -31,7 +31,7 @@ module TwitterClient
 
         Honeycomb.add_field("twitter.result", "error")
         Honeycomb.add_field("twitter.error", class_name)
-        DatadogStatsClient.increment(
+        ForemStatsClient.increment(
           "twitter.errors",
           tags: ["error:#{class_name}", "message:#{exception.message}"],
         )
@@ -44,9 +44,10 @@ module TwitterClient
         error_class = "::TwitterClient::Errors::#{class_name}".safe_constantize
         raise error_class, exception.message if error_class
 
-        error_class = if exception.class < Twitter::Error::ClientError
+        error_class = case exception
+                      when Twitter::Error::ClientError
                         TwitterClient::Errors::ClientError
-                      elsif exception.class < Twitter::Error::ServerError
+                      when Twitter::Error::ServerError
                         TwitterClient::Errors::ServerError
                       else
                         TwitterClient::Errors::Error
@@ -57,8 +58,8 @@ module TwitterClient
 
       def target
         Twitter::REST::Client.new(
-          consumer_key: ApplicationConfig["TWITTER_KEY"],
-          consumer_secret: ApplicationConfig["TWITTER_SECRET"],
+          consumer_key: Settings::Authentication.twitter_key.presence || ApplicationConfig["TWITTER_KEY"],
+          consumer_secret: Settings::Authentication.twitter_secret.presence || ApplicationConfig["TWITTER_SECRET"],
           user_agent: "TwitterRubyGem/#{Twitter::Version} (#{URL.url})",
           timeouts: {
             connect: 5,

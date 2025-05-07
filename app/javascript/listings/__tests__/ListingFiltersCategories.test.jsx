@@ -1,7 +1,7 @@
 import { h } from 'preact';
 import { render } from '@testing-library/preact';
 import { axe } from 'jest-axe';
-import ListingFiltersCategories from '../components/ListingFiltersCategories';
+import { ListingFiltersCategories } from '../components/ListingFiltersCategories';
 
 describe('<ListingFiltersCategories />', () => {
   beforeEach(() => {
@@ -49,11 +49,10 @@ describe('<ListingFiltersCategories />', () => {
 
     it('should be "selected" when there is no category selected', () => {
       const propsWithoutCategory = { ...getProps(), category: '' };
-      const { queryByTestId } = renderListingFilterCategories(
-        propsWithoutCategory,
-      );
+      const { queryByTestId } =
+        renderListingFilterCategories(propsWithoutCategory);
 
-      expect(queryByTestId('selected')).toBeDefined();
+      expect(queryByTestId('selected')).toExist();
     });
   });
 

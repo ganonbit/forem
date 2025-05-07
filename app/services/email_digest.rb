@@ -1,10 +1,10 @@
 class EmailDigest
-  def self.send_periodic_digest_email(users = [])
-    new(users).send_periodic_digest_email
+  def self.send_periodic_digest_email(users = [], starting_id = 1, ending_id = 50_000_000)
+    new(users, starting_id, ending_id).send_periodic_digest_email
   end
 
-  def initialize(users = [])
-    @users = users.empty? ? get_users : users
+  def initialize(users = [], starting_id = 1, ending_id = 50_000_000)
+    @users = users.empty? ? get_users(starting_id, ending_id) : users
   end
 
   def send_periodic_digest_email
@@ -13,18 +13,23 @@ class EmailDigest
         # Temporary
         # @sre:mstruve This is temporary until we have an efficient way to handle this job
         # for our large DEV community. Smaller Forems should be able to handle it no problem
-        if SiteConfig.community_name == "DEV"
+        if ForemInstance.dev_to?
           Emails::SendUserDigestWorker.new.perform(user.id)
         else
           Emails::SendUserDigestWorker.perform_async(user.id)
         end
+      rescue StandardError => e
+        Honeybadger.notify(e)
       end
     end
   end
 
   private
 
-  def get_users
-    User.registered.where(email_digest_periodic: true).where.not(email: "")
+  def get_users(starting_id, ending_id)
+    User.registered.joins(:notification_setting)
+      .where(notification_setting: { email_digest_periodic: true })
+      .where.not(email: "")
+      .where("users.id >= ? AND users.id <= ?", starting_id, ending_id)
   end
 end

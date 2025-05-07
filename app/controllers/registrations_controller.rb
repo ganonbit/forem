@@ -2,65 +2,91 @@ class RegistrationsController < Devise::RegistrationsController
   prepend_before_action :require_no_authentication, only: []
 
   def new
-    if user_signed_in?
-      redirect_to root_path(signin: "true")
-    else
-      if URI(request.referer || "").host == URI(request.base_url).host
-        store_location_for(:user, request.referer)
-      end
-      super
+    return redirect_to root_path(signin: "true") if user_signed_in?
+
+    if URI(request.referer || "").host == URI(request.base_url).host
+      store_location_for(:user, request.referer)
     end
+
+    if RequestStore.store[:subforem_id] &&
+        RequestStore.store[:root_subforem_id] &&
+        RequestStore.store[:subforem_id] != RequestStore.store[:default_subforem_id] &&
+        RequestStore.store[:subforem_id] != RequestStore.store[:root_subforem_id]
+      subforem = Subforem.find_by(id: RequestStore.store[:root_subforem_id])
+      return unless subforem
+
+      return redirect_to URL.url("/enter?state=#{params[:state]}", subforem), allow_other_host: true, status: :moved_permanently
+    end
+
+    super
   end
 
   def create
-    not_authorized unless SiteConfig.allow_email_password_registration || SiteConfig.waiting_on_first_user
-    not_authorized if SiteConfig.waiting_on_first_user && ENV["FOREM_OWNER_SECRET"].present? &&
-      ENV["FOREM_OWNER_SECRET"] != params[:user][:forem_owner_secret]
+    authorize(params, policy_class: RegistrationPolicy)
 
-    if !ReCaptcha::CheckRegistrationEnabled.call || recaptcha_verified?
-      build_resource(sign_up_params)
-      resource.saw_onboarding = false
-      resource.registered = true
-      resource.registered_at = Time.current
-      resource.editor_version = "v2"
-      check_allowed_email(resource) if resource.email.present?
-      resource.save if resource.email.present?
-      yield resource if block_given?
-      if resource.persisted?
-        update_first_user_permissions(resource)
-        redirect_to "/confirm-email?email=#{resource.email}"
+    unless recaptcha_verified?
+      flash[:notice] = I18n.t("registrations_controller.error.recaptcha")
+      return redirect_to new_user_registration_path(state: "email_signup")
+    end
+
+    build_devise_resource
+
+    if resource.persisted?
+      resource.set_initial_roles!
+
+      if resource.creator?
+        prepare_new_forem_instance
+        sign_in(resource)
+        redirect_to new_admin_creator_setting_path
+      elsif ForemInstance.smtp_enabled?
+        redirect_to confirm_email_path(email: resource.email)
       else
-        render action: "by_email"
+        sign_in(resource)
+        redirect_to root_path
       end
     else
-      redirect_to new_user_registration_path(state: "email_signup")
-      flash[:notice] = "You must complete the recaptcha ✅"
+      render action: "by_email"
     end
   end
 
   private
 
-  def update_first_user_permissions(resource)
-    return unless SiteConfig.waiting_on_first_user
-
-    resource.add_role(:super_admin)
-    resource.add_role(:single_resource_admin, Config)
-    resource.add_role(:trusted)
-    SiteConfig.waiting_on_first_user = false
+  def prepare_new_forem_instance
+    Settings::General.waiting_on_first_user = false
     Users::CreateMascotAccount.call
+    Discover::RegisterWorker.perform_async # Register Forem instance on https://discover.forem.com
   end
 
   def recaptcha_verified?
-    recaptcha_params = { secret_key: SiteConfig.recaptcha_secret_key }
-    params["g-recaptcha-response"] && verify_recaptcha(recaptcha_params)
+    if ReCaptcha::CheckRegistrationEnabled.call
+      recaptcha_params = { secret_key: Settings::Authentication.recaptcha_secret_key }
+      params["g-recaptcha-response"] && verify_recaptcha(recaptcha_params)
+    else
+      true
+    end
   end
 
   def check_allowed_email(resource)
     domain = resource.email.split("@").last
-    allow_list = SiteConfig.allowed_registration_email_domains
-    return if allow_list.empty? || allow_list.include?(domain)
+    return true if Settings::Authentication.acceptable_domain?(domain: domain)
 
     resource.email = nil
-    resource.errors.add(:email, "is not included in allowed domains.")
+    # Alright, this error message isn't quite correct.  Is the email
+    # from a blocked domain?  Or an explicitly allowed domain.  I
+    # think this is enough.
+    resource.errors.add(:email, I18n.t("registrations_controller.error.domain"))
+  end
+
+  def build_devise_resource
+    build_resource(sign_up_params)
+    resource.registered_at = Time.current
+    resource.build_setting(editor_version: "v2")
+    resource.profile_image = Images::ProfileImageGenerator.call if resource.profile_image.blank?
+    if Settings::General.waiting_on_first_user
+      resource.password_confirmation = resource.password
+    end
+    check_allowed_email(resource) if resource.email.present?
+    resource.onboarding_subforem_id = RequestStore.store[:subforem_id] if RequestStore.store[:subforem_id].present?
+    resource.save if resource.email.present?
   end
 end

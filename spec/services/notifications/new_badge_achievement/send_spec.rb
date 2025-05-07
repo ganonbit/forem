@@ -1,7 +1,8 @@
 require "rails_helper"
 
 RSpec.describe Notifications::NewBadgeAchievement::Send, type: :service do
-  let(:badge_achievement) { create(:badge_achievement) }
+  let(:badge) { create(:badge, credits_awarded: 7) }
+  let(:badge_achievement) { create(:badge_achievement, badge: badge) }
   let(:blank_badge_achievement) { create(:badge_achievement, rewarding_context_message: nil) }
 
   def expected_json_data(badge_achievement)
@@ -13,7 +14,8 @@ RSpec.describe Notifications::NewBadgeAchievement::Send, type: :service do
         badge: {
           title: badge_achievement.badge.title,
           description: badge_achievement.badge.description,
-          badge_image_url: badge_achievement.badge.badge_image_url
+          badge_image_url: badge_achievement.badge.badge_image_url,
+          credits_awarded: badge_achievement.badge.credits_awarded
         }
       }
     }.to_json
@@ -40,7 +42,7 @@ RSpec.describe Notifications::NewBadgeAchievement::Send, type: :service do
 
   it "creates a notification with no action" do
     notification = described_class.call(badge_achievement)
-    expect(notification.action).to be(nil)
+    expect(notification.action).to be_nil
   end
 
   it "creates a notification with the proper json data" do

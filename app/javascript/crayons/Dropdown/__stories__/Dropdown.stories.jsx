@@ -1,43 +1,37 @@
 import { h } from 'preact';
-import { withKnobs, text } from '@storybook/addon-knobs';
 import './dropdown-css-helper.scss';
-import notes from './dropdowns.md';
-import { Dropdown } from '@crayons';
+import notes from './dropdowns.mdx';
+import { Dropdown, ButtonNew as Button } from '@crayons';
 
 export default {
   title: 'Components/Dropdowns',
-  decorators: [withKnobs],
-  parameters: { notes },
+  parameters: {
+    docs: {
+      page: notes,
+    },
+  },
 };
 
 export const Default = () => (
   <div className="dropdown-trigger-container">
-    <a href="/" className="crayons-btn dropdown-trigger">
-      Hover to trigger dropdown
-    </a>
-    <Dropdown className={text('className', 'mb-2')}>
-      Hey, I&apos;m a dropdown content! Lorem ipsum dolor sit amet, consectetur
-      adipisicing elit. Sequi ea voluptates quaerat eos consequuntur temporibus.
+    <Button
+      id="storybook-dropdown-trigger"
+      className="dropdown-trigger"
+      aria-haspopup="true"
+    >
+      Click to trigger dropdown
+    </Button>
+    <Dropdown
+      triggerButtonId="storybook-dropdown-trigger"
+      dropdownContentId="storybook-dropdown"
+    >
+      <p>
+        Hey, I&apos;m a dropdown content! Lorem ipsum dolor sit amet,
+        consectetur adipisicing elit.
+      </p>
+      <a href="/">Sequi ea voluptates</a>
     </Dropdown>
   </div>
 );
 
-Default.story = {
-  name: 'default',
-};
-
-export const AdditonalCssClasses = () => (
-  <div className="dropdown-trigger-container">
-    <a href="/" className="crayons-btn dropdown-trigger">
-      Hover to trigger dropdown
-    </a>
-    <Dropdown className={text('className', 'p-6')}>
-      Hey, I&apos;m a dropdown content! Lorem ipsum dolor sit amet, consectetur
-      adipisicing elit. Sequi ea voluptates quaerat eos consequuntur temporibus.
-    </Dropdown>
-  </div>
-);
-
-AdditonalCssClasses.story = {
-  name: 'additional CSS classes',
-};
+Default.storyName = 'default';

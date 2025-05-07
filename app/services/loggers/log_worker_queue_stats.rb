@@ -15,9 +15,9 @@ module Loggers
       end
 
       def record_queue_stats(queues)
-        queue_hash = queues.map do |queue|
+        queue_hash = queues.to_h do |queue|
           [queue.name, { size: queue.size, latency: queue.latency }]
-        end.to_h
+        end
         queue_hash.each do |queue_name, queue_values|
           latency = queue_values.fetch(:latency, 0)
           size = queue_values.fetch(:size, 0)
@@ -27,7 +27,7 @@ module Loggers
       end
 
       def log_to_datadog(metric_name, value, tags = [])
-        DatadogStatsClient.gauge(metric_name, value, tags: tags)
+        ForemStatsClient.gauge(metric_name, value, tags: tags)
       end
     end
   end

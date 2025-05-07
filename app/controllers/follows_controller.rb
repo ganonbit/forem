@@ -53,58 +53,78 @@ class FollowsController < ApplicationController
   def create
     authorize Follow
 
-    followable = case params[:followable_type]
-                 when "Organization"
-                   Organization.find(params[:followable_id])
-                 when "Tag"
-                   Tag.find(params[:followable_id])
-                 when "Podcast"
-                   Podcast.find(params[:followable_id])
-                 else
-                   User.find(params[:followable_id])
-                 end
+    followable_klass = case params[:followable_type].capitalize
+                       when "Organization", "Tag", "Podcast"
+                         params[:followable_type].capitalize.constantize
+                       else
+                         User
+                       end
+
+    followable = followable_klass.find(params[:followable_id])
 
     need_notification = Follow.need_new_follower_notification_for?(followable.class.name)
 
     @result = if params[:verb] == "unfollow"
-                unfollow(followable, need_notification: need_notification)
+                unfollow(followable, params[:followable_type], need_notification: need_notification)
               else
                 if rate_limiter.limit_by_action("follow_account")
-                  render json: { error: "Daily account follow limit reached!" }, status: :too_many_requests
+                  render json: { error: I18n.t("follows_controller.daily_limit") },
+                         status: :too_many_requests
                   return
                 end
                 follow(followable, need_notification: need_notification)
               end
 
+    clear_followed_tag_caches if followable_klass == Tag
+
     render json: { outcome: @result }
   end
 
-  def update
-    @follow = Follow.find(params[:id])
-    authorize @follow
-    @follow.explicit_points = follow_params[:explicit_points]
-    redirect_to dashboard_following_path if @follow.save
+  def bulk_update
+    @follows = Follow.where(id: params_for_update.keys).includes(:follower, :followable)
+    authorize @follows
+    Follow.transaction do
+      @follows.each { |follow| follow.update!(params_for_update[follow.id.to_s]) }
+    end
+    redirect_to dashboard_following_path
   end
 
   private
 
-  def follow_params
-    params.require(:follow).permit(policy(Follow).permitted_attributes)
+  def follows_params
+    params.permit(follows: policy(Follow).permitted_attributes)
+  end
+
+  def params_for_update
+    follows_params[:follows].each_with_object({}) do |follow, params|
+      params[follow[:id]] = follow.slice(:explicit_points)
+    end
   end
 
   def follow(followable, need_notification: false)
     user_follow = current_user.follow(followable)
+    user_follow.update!(explicit_points: params[:explicit_points]) if params[:explicit_points].present?
     Notification.send_new_follower_notification(user_follow) if need_notification
-    "followed"
+    I18n.t("follows_controller.followed")
   rescue ActiveRecord::RecordInvalid
-    DatadogStatsClient.increment("users.invalid_follow")
-    "already followed"
+    ForemStatsClient.increment("users.invalid_follow")
+    I18n.t("follows_controller.already_followed")
   end
 
-  def unfollow(followable, need_notification: false)
+  def clear_followed_tag_caches
+    # Clear the followed_tags model cache, which is nested inside the async_info cache
+    Rails.cache.delete("#{current_user.cache_key}-#{current_user.last_followed_at&.rfc3339}/followed_tags")
+    # Clear the async_info cache, which contains the list of tags the user is currently following
+    Rails.cache.delete("#{current_user.cache_key_with_version}/user-info")
+  end
+
+  def unfollow(followable, followable_type, need_notification: false)
     user_follow = current_user.stop_following(followable)
     Notification.send_new_follower_notification_without_delay(user_follow, is_read: true) if need_notification
 
-    "unfollowed"
+    # Clear the user-follows-user cache async
+    Follows::DeleteCached.call(current_user, followable_type, followable.id)
+
+    I18n.t("follows_controller.unfollowed")
   end
 end

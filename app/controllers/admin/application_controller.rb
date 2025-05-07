@@ -5,38 +5,31 @@ module Admin
     after_action :verify_authorized
 
     HELP_URLS = {
-      badges: "https://forem.gitbook.io/forem-admin-guide/admin/badges",
-      badge_achievements: "https://forem.gitbook.io/forem-admin-guide/admin/badges",
-      configs: "https://forem.gitbook.io/forem-admin-guide/admin/config",
-      navigation_links: "https://forem.gitbook.io/forem-admin-guide/admin/navigation-links",
-      pages: "https://forem.gitbook.io/forem-admin-guide/admin/pages",
-      podcasts: "https://forem.gitbook.io/forem-admin-guide/admin/podcasts",
-      reports: "https://forem.gitbook.io/forem-admin-guide/admin/reports",
-      users: "https://forem.gitbook.io/forem-admin-guide/admin/users",
-      html_variants: "https://forem.gitbook.io/forem-admin-guide/admin/html-variants",
-      display_ads: "https://forem.gitbook.io/forem-admin-guide/admin/display-ads",
-      chat_channels: "https://forem.gitbook.io/forem-admin-guide/admin/chat-channels",
-      tags: "https://forem.gitbook.io/forem-admin-guide/admin/tags"
+      articles: "https://admin.forem.com/docs/forem-basics/posts",
+      badges: "https://admin.forem.com/docs/forem-basics/badges",
+      badge_achievements: "https://admin.forem.com/docs/forem-basics/badges",
+      billboards: "https://admin.forem.com/docs/advanced-customization/billboards",
+      feedback_messages: "https://admin.forem.com/docs/advanced-customization/reports",
+      html_variants: "https://admin.forem.com/docs/advanced-customization/html-variants",
+      navigation_links: "https://admin.forem.com/docs/advanced-customization/navigation-links",
+      organizations: "https://admin.forem.com/docs/managing-your-community/organization-pages",
+      pages: "https://admin.forem.com/docs/forem-basics/pages",
+      permissions: "https://admin.forem.com/docs/forem-basics/user-roles",
+      podcasts: "https://admin.forem.com/docs/advanced-customization/content-manager/podcasts",
+      settings: "https://admin.forem.com/docs/advanced-customization/config",
+      tags: "https://admin.forem.com/docs/forem-basics/tags",
+      users: "https://admin.forem.com/docs/forem-basics/user-roles",
+      creator_settings: "https://admin.forem.com/docs/getting-started/first-user-registration"
     }.freeze
 
-    private
+    protected
 
     def authorization_resource
-      self.class.name.demodulize.sub("Controller", "").singularize.constantize
+      self.class.name.sub("Admin::", "").sub("Controller", "").singularize.constantize
     end
 
     def authorize_admin
       authorize(authorization_resource, :access?, policy_class: InternalPolicy)
-    end
-
-    def bust_content_change_caches
-      CacheBuster.bust("/tags/onboarding") # Needs to change when suggested_tags is edited.
-      CacheBuster.bust("/shell_top") # Cached at edge, sent to service worker.
-      CacheBuster.bust("/shell_bottom") # Cached at edge, sent to service worker.
-      CacheBuster.bust("/async_info/shell_version") # Checks if current users should be busted.
-      CacheBuster.bust("/onboarding") # Page is cached at edge.
-      CacheBuster.bust("/") # Page is cached at edge.
-      SiteConfig.admin_action_taken_at = Time.current # Used as cache key
     end
 
     def assign_help_url

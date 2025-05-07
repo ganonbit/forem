@@ -1,5 +1,3 @@
-/* global initializeUserFollowButts */
-
 function initializeLocalStorageRender() {
   try {
     var userData = browserStoreCache('get');
@@ -7,9 +5,7 @@ function initializeLocalStorageRender() {
       document.body.dataset.user = userData;
       initializeBaseUserData();
       initializeReadingListIcons();
-      initializeAllFollowButts();
-      initializeUserFollowButts();
-      initializeSponsorshipVisibility();
+      initializeBillboardVisibility();
     }
   } catch (err) {
     browserStoreCache('remove');

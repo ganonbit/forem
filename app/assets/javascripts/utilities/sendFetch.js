@@ -46,12 +46,6 @@ function sendFetch(switchStatement, body) {
         addTokenToBody: true,
         body,
       });
-    case 'chat-creation':
-      return fetchCallback({
-        url: '/chat_channels/create_chat',
-        addTokenToBody: true,
-        body,
-      });
     case 'block-user':
       return fetchCallback({
         url: '/user_blocks',
@@ -74,6 +68,33 @@ function sendFetch(switchStatement, body) {
       return fetchCallback({
         url: '/comments/preview',
         headers: {
+          'Content-Type': 'application/json',
+        },
+        body,
+      });
+    case 'user_subscriptions':
+      return fetchCallback({
+        url: '/user_subscriptions',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body,
+      });
+    case 'comment-subscribe':
+      return fetchCallback({
+        url: '/comments/subscribe',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body,
+      });
+    case 'comment-unsubscribe':
+      return fetchCallback({
+        url: 'subscription/unsubscribe',
+        headers: {
+          Accept: 'application/json',
           'Content-Type': 'application/json',
         },
         body,

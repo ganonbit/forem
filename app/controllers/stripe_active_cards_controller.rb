@@ -5,22 +5,24 @@ class StripeActiveCardsController < ApplicationController
   AUDIT_LOG_CATEGORY = "user.credit_card.edit".freeze
   private_constant :AUDIT_LOG_CATEGORY
 
+  STRIPE_PERMITTED_PARAMS = %i[stripe_token].freeze
+
   def create
     authorize :stripe_active_card
 
     customer = find_or_create_customer
 
     if Payments::Customer.create_source(customer.id, stripe_params[:stripe_token])
-      flash[:settings_notice] = "Your billing information has been updated"
+      flash[:settings_notice] = I18n.t("stripe_active_cards_controller.updated")
       audit_log("add")
     else
-      DatadogStatsClient.increment("stripe.errors", tags: ["action:create_card", "user_id:#{current_user.id}"])
+      ForemStatsClient.increment("stripe.errors", tags: ["action:create_card", "user_id:#{current_user.id}"])
 
-      flash[:error] = "There was a problem updating your billing info."
+      flash[:error] = I18n.t("stripe_active_cards_controller.cannot_update")
     end
     redirect_to user_settings_path(:billing)
   rescue Payments::CardError, Payments::InvalidRequestError => e
-    DatadogStatsClient.increment("stripe.errors", tags: ["action:create_card", "user_id:#{current_user.id}"])
+    ForemStatsClient.increment("stripe.errors", tags: ["action:create_card", "user_id:#{current_user.id}"])
     redirect_to user_settings_path(:billing), flash: { error: e.message }
   end
 
@@ -33,16 +35,16 @@ class StripeActiveCardsController < ApplicationController
     customer.default_source = card.id
 
     if Payments::Customer.save(customer)
-      flash[:settings_notice] = "Your billing information has been updated"
+      flash[:settings_notice] = I18n.t("stripe_active_cards_controller.updated")
       audit_log("update")
     else
-      DatadogStatsClient.increment("stripe.errors", tags: ["action:update_card", "user_id:#{current_user.id}"])
-      flash[:error] = "There was a problem updating your billing info."
+      ForemStatsClient.increment("stripe.errors", tags: ["action:update_card", "user_id:#{current_user.id}"])
+      flash[:error] = I18n.t("stripe_active_cards_controller.cannot_update")
     end
 
     redirect_to user_settings_path(:billing)
   rescue Payments::CardError, Payments::InvalidRequestError => e
-    DatadogStatsClient.increment("stripe.errors", tags: ["action:update_card", "user_id:#{current_user.id}"])
+    ForemStatsClient.increment("stripe.errors", tags: ["action:update_card", "user_id:#{current_user.id}"])
 
     redirect_to user_settings_path(:billing), flash: { error: e.message }
   end
@@ -53,19 +55,19 @@ class StripeActiveCardsController < ApplicationController
     customer = find_customer
 
     if customer.subscriptions.count.positive?
-      flash[:error] = "Can't remove card if you have an active membership. Please cancel your membership first."
+      flash[:error] = I18n.t("stripe_active_cards_controller.cannot_remove")
     else
       source = Payments::Customer.get_source(customer, params[:id])
       Payments::Customer.detach_source(customer.id, source.id)
       Payments::Customer.save(customer)
 
-      flash[:settings_notice] = "Your card has been successfully removed."
+      flash[:settings_notice] = I18n.t("stripe_active_cards_controller.removed")
       audit_log("remove")
     end
 
     redirect_to user_settings_path(:billing)
   rescue Payments::InvalidRequestError => e
-    DatadogStatsClient.increment("stripe.errors")
+    ForemStatsClient.increment("stripe.errors")
 
     redirect_to user_settings_path(:billing), flash: { error: e.message }
   end
@@ -87,7 +89,7 @@ class StripeActiveCardsController < ApplicationController
   end
 
   def stripe_params
-    params.permit(%i[stripe_token])
+    params.permit(STRIPE_PERMITTED_PARAMS)
   end
 
   def audit_log(user_action)

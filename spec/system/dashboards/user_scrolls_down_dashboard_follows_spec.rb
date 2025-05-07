@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "Infinite scroll on dashboard", type: :system, js: true do
+RSpec.describe "Infinite scroll on dashboard", js: true do
   let(:default_per_page) { 3 }
   let(:total_records) { default_per_page * 2 }
   let(:user) { create(:user) }
@@ -40,18 +40,6 @@ RSpec.describe "Infinite scroll on dashboard", type: :system, js: true do
 
     it "scrolls through all tags" do
       page.assert_selector('div[id^="follows"]', count: total_records)
-    end
-
-    it "updates a tag point value" do
-      last_div = page.all('div[id^="follows"]').last
-      within last_div do
-        fill_in "follow_explicit_points", with: 10.0
-        click_button "commit"
-      end
-      first_div = page.find('div[id^="follows"]', match: :first)
-      within first_div do
-        expect(page).to have_field("follow_explicit_points", with: 10.0)
-      end
     end
   end
 

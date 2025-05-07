@@ -10,49 +10,88 @@ function removeExistingCSRF() {
 }
 
 function fetchBaseData() {
-  var xmlhttp;
-  if (window.XMLHttpRequest) {
-    xmlhttp = new XMLHttpRequest();
-  } else {
-    xmlhttp = new ActiveXObject('Microsoft.XMLHTTP');
-  }
-  xmlhttp.onreadystatechange = () => {
-    if (xmlhttp.readyState === XMLHttpRequest.DONE) {
-      // Assigning CSRF
-      var json = JSON.parse(xmlhttp.responseText);
-      if (json.token) {
-        removeExistingCSRF();
-      }
-      var newCsrfParamMeta = document.createElement('meta');
-      newCsrfParamMeta.name = 'csrf-param';
-      newCsrfParamMeta.content = json.param;
-      document.head.appendChild(newCsrfParamMeta);
-      var newCsrfTokenMeta = document.createElement('meta');
-      newCsrfTokenMeta.name = 'csrf-token';
-      newCsrfTokenMeta.content = json.token;
-      document.head.appendChild(newCsrfTokenMeta);
-      document.body.dataset.loaded = 'true';
+  fetch('/async_info/base_data')
+    .then((response) => response.json())
+    .then(
+      ({
+        token,
+        param,
+        broadcast,
+        user,
+        creator,
+        client_geolocation,
+        default_email_optin_allowed,
+      }) => {
+        if (token) {
+          removeExistingCSRF();
+        }
 
-      // Assigning Broadcast
-      if (json.broadcast) {
-        document.body.dataset.broadcast = json.broadcast;
-      }
+        const newCsrfParamMeta = document.createElement('meta');
+        newCsrfParamMeta.name = 'csrf-param';
+        newCsrfParamMeta.content = param;
+        document.head.appendChild(newCsrfParamMeta);
 
-      // Assigning User
-      if (checkUserLoggedIn()) {
-        document.body.dataset.user = json.user;
-        browserStoreCache('set', json.user);
-        setTimeout(() => {
-          if (typeof ga === 'function') {
-            ga('set', 'userId', JSON.parse(json.user).id);
+        const newCsrfTokenMeta = document.createElement('meta');
+        newCsrfTokenMeta.name = 'csrf-token';
+        newCsrfTokenMeta.content = token;
+        document.head.appendChild(newCsrfTokenMeta);
+        document.body.dataset.loaded = 'true';
+
+        if (broadcast) {
+          document.body.dataset.broadcast = broadcast;
+        }
+
+        if (checkUserLoggedIn() && user) {
+          document.body.dataset.user = user;
+          document.body.dataset.creator = creator;
+          document.body.dataset.clientGeolocation =
+            JSON.stringify(client_geolocation);
+          document.body.dataset.default_email_optin_allowed =
+            default_email_optin_allowed;
+          const userJson = JSON.parse(user);
+          browserStoreCache('set', user);
+          document.body.className = userJson.config_body_class;
+
+          if (userJson.config_body_class && userJson.config_body_class.includes('dark-theme') && document.getElementById('dark-mode-style')) {
+            document.getElementById('body-styles').innerHTML = '<style>'+document.getElementById('dark-mode-style').innerHTML+'</style>'
+          } else {
+            document.getElementById('body-styles').innerHTML = '<style>'+document.getElementById('light-mode-style').innerHTML+'</style>'
           }
-        }, 400);
-      }
-    }
-  };
 
-  xmlhttp.open('GET', '/async_info/base_data', true);
-  xmlhttp.send();
+          if (window && window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              action: 'user',
+              data: userJson,
+            }));  
+          }
+
+          const isForemWebview = navigator.userAgent === 'ForemWebView/1';
+          if (isForemWebview || window.frameElement) { // Hide top bar and footer when loaded within iframe
+            document.body.classList.add("hidden-shell");
+          }
+
+          setTimeout(() => {
+            if (typeof ga === 'function') {
+              ga('set', 'userId', userJson.id);
+            }
+            if (typeof gtag === 'function') {
+              gtag('set', 'user_Id', userJson.id);
+            }
+          }, 400);
+        } else if (checkUserLoggedIn()){
+          // Reload page if user is present but document user check is not
+          delete document.body.dataset.user;
+          delete document.body.dataset.creator;
+          browserStoreCache('remove');
+          location.reload();
+        } else {
+          // Ensure user data is not exposed if no one is logged in
+          delete document.body.dataset.user;
+          delete document.body.dataset.creator;
+          browserStoreCache('remove');
+        }
+      },
+    );
 }
 
 function initializeBodyData() {

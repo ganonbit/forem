@@ -1,13 +1,13 @@
 require "rails_helper"
 
-RSpec.describe "Profiles", type: :request do
+RSpec.describe "Profiles" do
   let(:profile) { create(:profile) }
 
   describe "POST /profiles" do
     context "when signed out" do
       it "redirects to the login page" do
         patch profile_path(profile), params: {}
-        expect(response).to redirect_to(sign_up_path)
+        expect(response).to redirect_to(new_magic_link_path)
       end
     end
 

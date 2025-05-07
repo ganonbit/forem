@@ -6,42 +6,38 @@ module Moderator
 
     attr_reader :keep_user, :admin, :delete_user_id
 
-    def initialize(admin:, keep_user:, delete_user_id:) # rubocop:disable Lint/MissingSuper
+    def initialize(admin:, keep_user:, delete_user_id:)
       @keep_user = keep_user
       @admin = admin
       @delete_user = User.find(delete_user_id.to_i)
     end
 
     def merge
-      raise "You cannot merge the same two user id#s" if @delete_user.id == @keep_user.id
+      raise StandardError, I18n.t("services.moderator.merge_user.same_user") if @delete_user.id == @keep_user.id
 
       handle_identities
       merge_content
       merge_follows
-      merge_chat_mentions
+      merge_mentions
       merge_profile
       update_social
       Users::DeleteWorker.new.perform(@delete_user.id, true)
       @keep_user.touch(:profile_updated_at)
       Users::MergeSyncWorker.perform_async(@keep_user.id)
 
-      CacheBuster.bust("/#{@keep_user.username}")
+      EdgeCache::Bust.call("/#{@keep_user.username}")
     end
 
     private
 
     def handle_identities
-      error_message = "The user being deleted already has two identities. " \
-        "Are you sure this is the right user to be deleted? " \
-        "If so, a super admin will need to do this from the console to be safe."
-      raise error_message if @delete_user.identities.count.positive?
+      raise StandardError, I18n.t("services.moderator.merge_user.multiple") if @delete_user.identities.count >= 2
+      raise StandardError, I18n.t("services.moderator.merge_user.duplicate") if
+        (@delete_user.identities.pluck(:provider) & @keep_user.identities.pluck(:provider)).any?
 
-      return true if
-        @keep_user.identities.count.positive? ||
-          @delete_user.identities.none? ||
-          @keep_user.identities.last.provider == @delete_user.identities.last.provider
+      return true if @delete_user.identities.none?
 
-      @delete_user.identities.first.update_columns(user_id: @keep_user.id)
+      @delete_user.identities.update_all(user_id: @keep_user.id)
     end
 
     def update_social
@@ -68,16 +64,14 @@ module Moderator
       @keep_user.update_columns(created_at: @delete_user.created_at) if @delete_user.created_at < @keep_user.created_at
     end
 
-    def merge_chat_mentions
-      any_memberships = @delete_user.chat_channel_memberships.any?
-      @delete_user.chat_channel_memberships.update_all(user_id: @keep_user.id) if any_memberships
-      @delete_user.mentions.update_all(user_id: @keep_user.id) if @delete_user.mentions.any?
-    end
-
     def merge_follows
       @delete_user.follows&.update_all(follower_id: @keep_user.id) if @delete_user.follows.any?
       @delete_user_followers = Follow.followable_user(@delete_user.id)
       @delete_user_followers.update_all(followable_id: @keep_user.id) if @delete_user_followers.any?
+    end
+
+    def merge_mentions
+      @delete_user.mentions.update_all(user_id: @keep_user.id) if @delete_user.mentions.any?
     end
 
     def merge_content

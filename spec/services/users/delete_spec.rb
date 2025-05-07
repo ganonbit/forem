@@ -1,12 +1,15 @@
 require "rails_helper"
 
 RSpec.describe Users::Delete, type: :service do
+  let(:cache_bust) { instance_double(EdgeCache::Bust) }
+  let(:user) { create(:user, :trusted, :with_identity, identities: ["github"]) }
+
   before do
     omniauth_mock_github_payload
-    allow(SiteConfig).to receive(:authentication_providers).and_return(Authentication::Providers.available)
+    allow(Settings::Authentication).to receive(:providers).and_return(Authentication::Providers.available)
+    allow(EdgeCache::Bust).to receive(:new).and_return(cache_bust)
+    allow(cache_bust).to receive(:call)
   end
-
-  let(:user) { create(:user, :trusted, :with_identity, identities: ["github"]) }
 
   it "deletes user" do
     described_class.call(user)
@@ -14,9 +17,8 @@ RSpec.describe Users::Delete, type: :service do
   end
 
   it "busts user profile page" do
-    allow(CacheBuster).to receive(:bust)
     described_class.new(user).call
-    expect(CacheBuster).to have_received(:bust).with("/#{user.username}")
+    expect(cache_bust).to have_received(:call).with("/#{user.username}")
   end
 
   it "deletes user's follows" do
@@ -34,6 +36,14 @@ RSpec.describe Users::Delete, type: :service do
     expect(Article.find_by(id: article.id)).to be_nil
   end
 
+  it "deletes user's owned podcasts" do
+    podcast = create(:podcast, creator: user)
+    create(:podcast_ownership, owner: user, podcast: podcast)
+    expect do
+      described_class.call(user)
+    end.to change(Podcast, :count).by(-1)
+  end
+
   it "deletes the destroy token" do
     allow(Rails.cache).to receive(:delete).and_call_original
     described_class.call(user)
@@ -45,28 +55,9 @@ RSpec.describe Users::Delete, type: :service do
 
     expect do
       described_class.call(user)
-    end.to change(AuditLog, :count).by(0)
+    end.not_to change(AuditLog, :count)
 
-    expect(audit_log.reload.user_id).to be(nil)
-  end
-
-  it "removes user from Elasticsearch" do
-    sidekiq_perform_enqueued_jobs { user }
-    expect(user.elasticsearch_doc).not_to be_nil
-    sidekiq_perform_enqueued_jobs do
-      described_class.call(user)
-    end
-    expect { user.elasticsearch_doc }.to raise_error(Search::Errors::Transport::NotFound)
-  end
-
-  it "removes articles from Elasticsearch" do
-    article = create(:article, user: user)
-    sidekiq_perform_enqueued_jobs
-    expect(article.elasticsearch_doc).not_to be_nil
-    sidekiq_perform_enqueued_jobs do
-      described_class.call(user)
-    end
-    expect { article.elasticsearch_doc }.to raise_error(Search::Errors::Transport::NotFound)
+    expect(audit_log.reload.user_id).to be_nil
   end
 
   it "deletes field tests memberships" do
@@ -77,6 +68,14 @@ RSpec.describe Users::Delete, type: :service do
     end.to change(FieldTest::Membership, :count).by(-1)
   end
 
+  it "deletes reactions to the user" do
+    create(:vomit_reaction, reactable: user)
+
+    expect do
+      described_class.call(user)
+    end.to change(Reaction, :count).by(-1)
+  end
+
   # check that all the associated records are being destroyed,
   # except for those that are kept explicitly (kept_associations)
   describe "deleting associations" do
@@ -85,9 +84,9 @@ RSpec.describe Users::Delete, type: :service do
         affected_feedback_messages
         audit_logs
         banished_users
-        buffer_updates_approved
-        buffer_updates_composed
+        billboard_events
         created_podcasts
+        feed_events
         offender_feedback_messages
         page_views
         rating_votes
@@ -138,12 +137,13 @@ RSpec.describe Users::Delete, type: :service do
     end
 
     it "keeps the kept associations" do
+      # NB: each association must have a factory defined!
       expect(kept_associations).not_to be_empty
       user.reload
       described_class.call(user)
       aggregate_failures "associations should exist" do
         kept_associations.each do |kept_association|
-          expect { kept_association.reload }.not_to raise_error, kept_association
+          expect { kept_association.reload }.not_to raise_error
         end
       end
     end
@@ -155,25 +155,27 @@ RSpec.describe Users::Delete, type: :service do
       described_class.call(user)
       aggregate_failures "associations should not exist" do
         user_associations.each do |user_association|
-          expect { user_association.reload }.to raise_error(ActiveRecord::RecordNotFound), user_association
+          expect { user_association.reload }.to raise_error(ActiveRecord::RecordNotFound)
         end
       end
     end
   end
 
-  context "when cleaning up chat channels" do
-    let(:other_user) { create(:user) }
-
-    it "deletes the user's private chat channels" do
-      chat_channel = ChatChannels::CreateWithUsers.call(users: [user, other_user])
-      described_class.call(user)
-      expect(ChatChannel.find_by(id: chat_channel.id)).to be_nil
+  context "when the user was suspended" do
+    it "stores a hash of the username so the user can't sign up again" do
+      user = create(:user, :suspended)
+      expect do
+        described_class.call(user)
+      end.to change(Users::SuspendedUsername, :count).by(1)
     end
+  end
 
-    it "does not delete the user's open channels" do
-      chat_channel = ChatChannels::CreateWithUsers.call(users: [user, other_user], channel_type: "open")
-      described_class.call(user)
-      expect(ChatChannel.find_by(id: chat_channel.id)).not_to be_nil
+  context "when the user was a spammer" do
+    it "stores a hash of the username so the user can't sign up again" do
+      user = create(:user, :spam)
+      expect do
+        described_class.call(user)
+      end.to change(Users::SuspendedUsername, :count).by(1)
     end
   end
 end

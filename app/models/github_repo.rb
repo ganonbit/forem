@@ -27,9 +27,8 @@ class GithubRepo < ApplicationRecord
   end
 
   def self.update_to_latest
-    where("updated_at < ?", 26.hours.ago).ids.each do |repo_id|
-      GithubRepos::RepoSyncWorker.perform_async(repo_id)
-    end
+    ids = where(updated_at: ...26.hours.ago).ids.map { |id| [id] }
+    GithubRepos::RepoSyncWorker.perform_bulk(ids)
   end
 
   private
@@ -38,8 +37,9 @@ class GithubRepo < ApplicationRecord
     return if user.blank?
 
     user.touch
-    CacheBuster.bust(user.path)
-    CacheBuster.bust("#{user.path}?i=i")
-    CacheBuster.bust("#{user.path}/?i=i")
+    cache_bust = EdgeCache::Bust.new
+    cache_bust.call(user.path)
+    cache_bust.call("#{user.path}?i=i")
+    cache_bust.call("#{user.path}/?i=i")
   end
 end

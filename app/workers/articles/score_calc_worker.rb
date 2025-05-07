@@ -1,6 +1,6 @@
 module Articles
   class ScoreCalcWorker
-    include Sidekiq::Worker
+    include Sidekiq::Job
 
     sidekiq_options queue: :medium_priority, lock: :until_executing
 
@@ -9,7 +9,6 @@ module Articles
       return unless article
 
       article.update_score
-      article.index_to_elasticsearch_inline
     end
   end
 end

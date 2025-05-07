@@ -15,11 +15,6 @@ const organizations = [
 ];
 
 describe('<OrganizationPicker />', () => {
-  beforeAll(() => {
-    // TODO: Remove this once https://github.com/nickcolley/jest-axe/issues/147 is fixed.
-    window.getComputedStyle = () => {};
-  });
-
   it('should have no a11y violations', async () => {
     const { container } = render(
       <OrganizationPicker
@@ -71,6 +66,6 @@ describe('<OrganizationPicker />', () => {
       />,
     );
 
-    expect(queryByText('None')).toBeDefined();
+    expect(queryByText('None')).toExist();
   });
 });

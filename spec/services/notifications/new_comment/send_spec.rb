@@ -6,7 +6,8 @@ RSpec.describe Notifications::NewComment::Send, type: :service do
   let(:user3)                { create(:user) }
   let(:top_level_subscriber) { create(:user) }
   let(:organization)         { create(:organization) }
-  let(:article)              { create(:article, :with_notification_subscription, user_id: user.id) }
+  let(:subforem)             { create(:subforem) }
+  let(:article)              { create(:article, :with_notification_subscription, user_id: user.id, subforem_id: subforem.id) }
   let(:comment)              { create(:comment, commentable: article, user: user2) }
   let(:author_comment)       { create(:comment, commentable: article, user: user) }
   let!(:child_comment)       { create(:comment, commentable: article, parent: comment, user: user3) }
@@ -23,6 +24,7 @@ RSpec.describe Notifications::NewComment::Send, type: :service do
     notification = child_comment.notifications.last
 
     expect(notification.action).to be_nil
+    expect(notification.subforem_id).to eq(subforem.id)
     expect(notification.json_data["user"]["id"]).to eq(child_comment.user.id)
     expect(notification.json_data["user"]["username"]).to eq(child_comment.user.username)
   end
@@ -98,19 +100,15 @@ RSpec.describe Notifications::NewComment::Send, type: :service do
                               organization_id: organization.id)).to be_any
   end
 
-  it "sends Push Notifications using Pusher Beams when configured" do
-    allow(ApplicationConfig).to receive(:[]).with("PUSHER_BEAMS_KEY").and_return("x" * 64)
-    allow(ApplicationConfig).to receive(:[]).with("APP_PROTOCOL").and_return("http://")
-    allow(ApplicationConfig).to receive(:[]).with("APP_DOMAIN").and_return("localhost:3000")
+  it "properly filters users for sending mobile push notifications" do
+    user.notification_setting.update(mobile_comment_notifications: true)
+    user2.notification_setting.update(mobile_comment_notifications: true)
+    user3.notification_setting.update(mobile_comment_notifications: true)
+    allow(PushNotifications::Send).to receive(:call)
 
-    allow(Pusher::PushNotifications).to receive(:publish_to_interests)
-
-    comment_sent = child_comment
-    described_class.call(comment_sent)
-
-    channels = ["user-notifications-#{user2.id}", "user-notifications-#{user.id}"]
-    payload = described_class.new(comment_sent).__send__(:push_notification_payload)
-    expect(Pusher::PushNotifications).to have_received(:publish_to_interests).with(interests: channels,
-                                                                                   payload: payload)
+    described_class.call(comment)
+    expect(PushNotifications::Send).to have_received(:call).with hash_including(
+      user_ids: [author_comment.user_id],
+    )
   end
 end

@@ -1,25 +1,21 @@
 import PropTypes from 'prop-types';
 import { h } from 'preact';
-import { Button } from '@crayons';
+import { Link } from '@crayons';
 
-const ActionButtons = ({ isDraft, editUrl, deleteConfirmUrl }) => {
+export const ActionButtons = ({ isDraft, editUrl, deleteConfirmUrl }) => {
   return (
-    <div className="listing-row-actions">
+    <div className="listing-row-actions flex">
       {isDraft && (
-        <Button href={editUrl} className="dashboard-listing-edit-button">
+        <Link block href={editUrl}>
           View draft
-        </Button>
+        </Link>
       )}
-      <Button href={editUrl} className="dashboard-listing-edit-button">
+      <Link block href={editUrl}>
         Edit
-      </Button>
-      <Button
-        variant="danger"
-        href={deleteConfirmUrl}
-        className="dashboard-listing-delete-button"
-      >
+      </Link>
+      <Link block href={deleteConfirmUrl}>
         Delete
-      </Button>
+      </Link>
     </div>
   );
 };
@@ -29,5 +25,3 @@ ActionButtons.propTypes = {
   editUrl: PropTypes.string.isRequired,
   deleteConfirmUrl: PropTypes.string.isRequired,
 };
-
-export default ActionButtons;

@@ -1,14 +1,19 @@
 module BadgeAchievements
   class BadgeAwardWorker
-    include Sidekiq::Worker
+    include Sidekiq::Job
 
     sidekiq_options queue: :high_priority, retry: 10
 
-    def perform(usernames, badge_slug, message)
-      if BadgeRewarder.respond_to?(badge_slug)
-        BadgeRewarder.public_send(badge_slug)
+    def perform(usernames, badge_slug, message, include_default_description = true) # rubocop:disable Style/OptionalBooleanParameter
+      if (award_class = "Badges::#{badge_slug.classify}".safe_constantize)
+        award_class.call
       else
-        BadgeRewarder.award_badges(usernames, badge_slug, message)
+        Badges::Award.call(
+          User.where(username: usernames),
+          badge_slug,
+          message,
+          include_default_description: include_default_description,
+        )
       end
     end
   end

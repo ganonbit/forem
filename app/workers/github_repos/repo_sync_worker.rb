@@ -1,8 +1,10 @@
 module GithubRepos
   class RepoSyncWorker
-    include Sidekiq::Worker
+    include Sidekiq::Job
 
     sidekiq_options queue: :low_priority, retry: 10, lock: :until_executing
+
+    TOUCH_USER_COOLDOWN = 30.minutes
 
     def perform(repo_id)
       repo = GithubRepo.find_by(id: repo_id)
@@ -25,12 +27,21 @@ module GithubRepos
           watchers_count: fetched_repo.watchers,
           stargazers_count: fetched_repo.stargazers_count,
           info_hash: fetched_repo.to_hash,
+          # Touch `updated_at` even if nothing here was updated. See PR #12853
+          # for more details.
+          updated_at: Time.current,
         )
-        repo.user&.touch(:github_repos_updated_at)
+        if repo.user&.github_repos_updated_at&.before?(TOUCH_USER_COOLDOWN.ago)
+          repo.user.touch(:github_repos_updated_at)
+        end
       rescue Github::Errors::NotFound,
              Github::Errors::Unauthorized,
              Github::Errors::AccountSuspended,
              Github::Errors::RepositoryUnavailable
+        repo.destroy
+      rescue Github::Errors::ClientError => e
+        raise e unless e.message.include?("Repository access blocked")
+
         repo.destroy
       end
     end

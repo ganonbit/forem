@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "Redirects authentication using Referer", type: :system do
+RSpec.describe "Redirects authentication using Referer" do
   let(:article) { build(:article) }
   let(:user) do
     create(:user, :with_identity, identities: [:twitter])
@@ -11,7 +11,7 @@ RSpec.describe "Redirects authentication using Referer", type: :system do
 
   before do
     omniauth_mock_twitter_payload
-    allow(SiteConfig).to receive(:authentication_providers).and_return(Authentication::Providers.available)
+    allow(Settings::Authentication).to receive(:providers).and_return(Authentication::Providers.available)
     OmniAuth.config.mock_auth[:twitter].info.email = user.email
   end
 
@@ -23,7 +23,7 @@ RSpec.describe "Redirects authentication using Referer", type: :system do
     it "redirects back to the main feed (root path)" do
       visit root_path
       click_link(login_link, match: :first)
-      click_link(sign_in_link, match: :first)
+      click_on(sign_in_link, match: :first)
 
       expect(page).to have_current_path("/", ignore_query: true)
     end
@@ -31,7 +31,7 @@ RSpec.describe "Redirects authentication using Referer", type: :system do
     it "redirects back to an article page" do
       visit "/#{article.slug}"
       click_link(login_link, match: :first)
-      click_link(sign_in_link, match: :first)
+      click_on(sign_in_link, match: :first)
 
       expect(page).to have_current_path("/#{article.slug}", ignore_query: true)
     end
@@ -41,7 +41,7 @@ RSpec.describe "Redirects authentication using Referer", type: :system do
     it "redirects back to the main feed as default" do
       Capybara.current_session.driver.header "Referer", ""
       visit sign_up_path
-      click_link(sign_in_link, match: :first)
+      click_on(sign_in_link, match: :first)
 
       expect(page).to have_current_path("/", ignore_query: true)
     end
@@ -51,7 +51,7 @@ RSpec.describe "Redirects authentication using Referer", type: :system do
     it "redirects back to the main feed as default" do
       Capybara.current_session.driver.header "Referer", "https://example.com"
       visit sign_up_path
-      click_link(sign_in_link, match: :first)
+      click_on(sign_in_link, match: :first)
 
       expect(page).to have_current_path("/", ignore_query: true)
     end

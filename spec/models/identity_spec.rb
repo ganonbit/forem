@@ -1,9 +1,13 @@
 require "rails_helper"
 
-RSpec.describe Identity, type: :model do
+RSpec.describe Identity do
   let(:identity) { create(:identity, user: create(:user), uid: SecureRandom.hex) }
 
   describe "validations" do
+    before do
+      omniauth_mock_providers_payload
+    end
+
     describe "builtin validations" do
       subject { identity }
 
@@ -11,7 +15,6 @@ RSpec.describe Identity, type: :model do
 
       it { is_expected.to validate_presence_of(:provider) }
       it { is_expected.to validate_presence_of(:uid) }
-      it { is_expected.to validate_presence_of(:user_id) }
       it { is_expected.to validate_uniqueness_of(:uid).scoped_to(:provider) }
       it { is_expected.to validate_uniqueness_of(:user_id).scoped_to(:provider) }
 
@@ -26,6 +29,38 @@ RSpec.describe Identity, type: :model do
 
     before do
       omniauth_mock_providers_payload
+    end
+
+    context "with Apple payload" do
+      let(:auth_payload) { OmniAuth.config.mock_auth[:apple] }
+      let(:provider) { Authentication::Providers::Apple.new(auth_payload) }
+
+      it "initializes a new identity from the auth payload" do
+        identity = described_class.build_from_omniauth(provider)
+
+        expect(identity.new_record?).to be(true)
+        expect(identity.provider).to eq("apple")
+        expect(identity.uid).to eq(auth_payload.uid)
+        expect(identity.token).to eq(auth_payload.credentials.token)
+        expect(identity.secret).to be_nil
+        expect(identity.auth_data_dump).to eq(provider.payload)
+      end
+
+      it "finds an existing identity" do
+        payload = provider.payload
+
+        existing_identity = described_class.create!(
+          user: user,
+          provider: payload.provider,
+          uid: payload.uid,
+          token: payload.credentials.token,
+          secret: nil,
+          auth_data_dump: payload,
+        )
+
+        identity = described_class.build_from_omniauth(provider)
+        expect(identity).to eq(existing_identity)
+      end
     end
 
     context "with Github payload" do
@@ -69,6 +104,38 @@ RSpec.describe Identity, type: :model do
 
         expect(identity.new_record?).to be(true)
         expect(identity.provider).to eq("facebook")
+        expect(identity.uid).to eq(auth_payload.uid)
+        expect(identity.token).to eq(auth_payload.credentials.token)
+        expect(identity.secret).to eq(auth_payload.credentials.secret)
+        expect(identity.auth_data_dump).to eq(provider.payload)
+      end
+
+      it "finds an existing identity" do
+        payload = provider.payload
+
+        existing_identity = described_class.create!(
+          user: user,
+          provider: payload.provider,
+          uid: payload.uid,
+          token: payload.credentials.token,
+          secret: payload.credentials.secret,
+          auth_data_dump: payload,
+        )
+
+        identity = described_class.build_from_omniauth(provider)
+        expect(identity).to eq(existing_identity)
+      end
+    end
+
+    context "with Forem payload" do
+      let(:auth_payload) { OmniAuth.config.mock_auth[:forem] }
+      let(:provider) { Authentication::Providers::Forem.new(auth_payload) }
+
+      it "initializes a new identity from the auth payload" do
+        identity = described_class.build_from_omniauth(provider)
+
+        expect(identity.new_record?).to be(true)
+        expect(identity.provider).to eq("forem")
         expect(identity.uid).to eq(auth_payload.uid)
         expect(identity.token).to eq(auth_payload.credentials.token)
         expect(identity.secret).to eq(auth_payload.credentials.secret)

@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "UserOrganization", type: :request do
+RSpec.describe "UserOrganization" do
   let(:user)          { create(:user) }
   let(:organization)  { create(:organization, secret: SecureRandom.hex(50)) }
 
@@ -10,7 +10,7 @@ RSpec.describe "UserOrganization", type: :request do
     it "creates an organization_membership association" do
       post "/users/join_org", params: { org_secret: organization.secret }
       org_membership = OrganizationMembership.first
-      expect(org_membership.persisted?).to eq true
+      expect(org_membership.persisted?).to be true
       expect(org_membership.user).to eq user
       expect(org_membership.organization).to eq organization
       expect(org_membership.type_of_user).to eq "member"
@@ -23,7 +23,7 @@ RSpec.describe "UserOrganization", type: :request do
 
     it "correctly strips the secret of the org_secret param" do
       post "/users/join_org", params: { org_secret: "#{organization.secret}     " }
-      expect(OrganizationMembership.exists?(user: user, organization: organization)).to eq true
+      expect(OrganizationMembership.exists?(user: user, organization: organization)).to be true
     end
   end
 
@@ -44,7 +44,7 @@ RSpec.describe "UserOrganization", type: :request do
     it "creates the correct organization_membership association" do
       create_org
       org_membership = OrganizationMembership.first
-      expect(org_membership.persisted?).to eq true
+      expect(org_membership.persisted?).to be true
       expect(org_membership.user).to eq user
       expect(org_membership.organization).to eq Organization.last
       expect(org_membership.type_of_user).to eq "admin"
@@ -52,7 +52,7 @@ RSpec.describe "UserOrganization", type: :request do
 
     it "redirects to the proper org settings page" do
       create_org
-      expect(response.status).to eq 302
+      expect(response).to have_http_status :found
       expect(response.redirect_url).to include "/settings/organization/#{Organization.last.id}"
     end
 
@@ -70,7 +70,7 @@ RSpec.describe "UserOrganization", type: :request do
   it "returns error if profile image file name is too long" do
     sign_in user
     org_params = build(:organization).attributes
-    image = fixture_file_upload("files/800x600.png", "image/png")
+    image = fixture_file_upload("800x600.png", "image/png")
     allow(image).to receive(:original_filename).and_return("#{'a_very_long_filename' * 15}.png")
     org_params["profile_image"] = image
     allow(Organization).to receive(:new).and_return(organization)
@@ -98,7 +98,7 @@ RSpec.describe "UserOrganization", type: :request do
     it "leaves org and deletes the member's organization membership" do
       org_id = org_member.organizations.first.id
       post "/users/leave_org/#{org_id}"
-      expect(OrganizationMembership.exists?(user_id: org_member.id, organization_id: org_id)).to eq false
+      expect(OrganizationMembership.exists?(user_id: org_member.id, organization_id: org_id)).to be false
     end
   end
 
@@ -118,13 +118,13 @@ RSpec.describe "UserOrganization", type: :request do
     it "adds org admin" do
       org = org_admin.organizations.first
       add_org_admin
-      expect(user2.org_admin?(org)).to eq(true)
+      expect(user2.org_admin?(org)).to be(true)
     end
 
     it "creates the org_membership association" do
       add_org_admin
       org_membership = OrganizationMembership.last
-      expect(org_membership.persisted?).to eq true
+      expect(org_membership.persisted?).to be true
       expect(org_membership.user_id).to eq user2.id
       expect(org_membership.organization_id).to eq org_id
       expect(org_membership.type_of_user).to eq "admin"
@@ -150,7 +150,7 @@ RSpec.describe "UserOrganization", type: :request do
 
     it "removes org admin" do
       post "/users/remove_org_admin", params: { user_id: second_org_admin.id, organization_id: org_id }
-      expect(second_org_admin.org_admin?(org_id)).to eq false
+      expect(second_org_admin.org_admin?(org_id)).to be false
     end
 
     it "updates the correct org_membership association to a member level" do
@@ -171,49 +171,75 @@ RSpec.describe "UserOrganization", type: :request do
     let(:org_member) { create(:user, :org_member) }
     let(:user) { create(:user) }
 
-    it "deletes the organization" do
-      org_id = org_admin.organizations.first.id
-      sign_in org_admin
-      delete "/organizations/#{org_id}"
-      expect { Organization.find(org_id) }.to raise_error(ActiveRecord::RecordNotFound)
+    context "when signed in as org_admin" do
+      let(:org) { org_admin.organizations.first }
+      let(:org_id) { org_admin.organizations.first.id }
+
+      before do
+        sign_in org_admin
+      end
+
+      it "deletes the organization" do
+        sidekiq_assert_enqueued_with(job: Organizations::DeleteWorker, args: [org_id, org_admin.id, true]) do
+          delete organization_path(org_id)
+        end
+      end
+
+      it "does not delete the organization if the organization has an article associated to it" do
+        create(:article, user: org_admin, organization_id: org_id)
+        sidekiq_assert_not_enqueued_with(job: Organizations::DeleteWorker) do
+          delete organization_path(org_id)
+        end
+      end
+
+      it "does not delete the organization if the organization has more than one member" do
+        create(:organization_membership, user: user, organization_id: org_id, type_of_user: "member")
+        sidekiq_assert_not_enqueued_with(job: Organizations::DeleteWorker) do
+          delete organization_path(org_id)
+        end
+      end
+
+      it "does not delete the organization if the organization has credits" do
+        Credit.add_to(org, 1)
+        sidekiq_assert_not_enqueued_with(job: Organizations::DeleteWorker) do
+          delete organization_path(org_id)
+        end
+      end
+
+      it "has the correct flash after deleting an org" do
+        delete organization_path(org_id)
+        notice_text = "Your organization: \"#{org.name}\" deletion is scheduled. You'll be notified when it's deleted."
+        expect(flash[:settings_notice]).to include(notice_text)
+      end
+
+      it "redirects after scheduling deleting an org" do
+        delete organization_path(org_id)
+        expect(response).to redirect_to(user_settings_path(:organization))
+      end
     end
 
     it "does not delete the organization if the user is only an org member" do
       org_id = org_member.organizations.first.id
       sign_in org_member
-      delete "/organizations/#{org_id}"
-      expect(Organization.find(org_id).persisted?).to eq true
+      sidekiq_assert_not_enqueued_with(job: Organizations::DeleteWorker) do
+        delete organization_path(org_id)
+      end
     end
 
     it "does not delete the organization if the user is not a part of the org" do
       org = create(:organization)
       sign_in user
-      delete "/organizations/#{org.id}"
-      expect(org.persisted?).to eq true
+      sidekiq_assert_not_enqueued_with(job: Organizations::DeleteWorker) do
+        delete organization_path(org.id)
+      end
     end
 
-    it "does not delete the organization if the organization has an article associated to it" do
-      org_id = org_admin.organizations.first.id
-      create(:article, user: org_admin, organization_id: org_id)
-      sign_in org_admin
-      delete "/organizations/#{org_id}"
-      expect(Organization.find(org_id).persisted?).to eq true
-    end
-
-    it "does not delete the organization if the organization has more than one member" do
-      org_id = org_admin.organizations.first.id
-      create(:organization_membership, user: user, organization_id: org_id, type_of_user: "member")
-      sign_in org_admin
-      delete "/organizations/#{org_id}"
-      expect(Organization.find(org_id).persisted?).to eq true
-    end
-
-    it "does not delete the organization if the organization has credits" do
-      org = org_admin.organizations.first
-      sign_in org_admin
-      Credit.add_to(org, 1)
-      delete "/organizations/#{org.id}"
-      expect(org.persisted?).to eq true
+    it "redirects correctly when not scheduling" do
+      org_id = org_member.organizations.first.id
+      sign_in org_member
+      delete organization_path(org_id)
+      expect(flash[:error]).to include("Your organization was not deleted")
+      expect(response).to redirect_to(user_settings_path(:organization, id: org_id))
     end
   end
 end

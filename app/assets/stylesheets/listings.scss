@@ -15,6 +15,7 @@
     margin-right: 5px;
     display: inline-block;
     width: fit-content;
+    width: -moz-fit-content;
     cursor: pointer;
     margin-bottom: 10px;
     user-select: none;
@@ -193,8 +194,6 @@
 
       .listing-row-actions {
         padding: var(--su-2) 0;
-        display: flex;
-        gap: var(--su-2);
 
         .pill {
           background: $bold-blue;

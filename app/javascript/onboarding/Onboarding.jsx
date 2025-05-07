@@ -1,26 +1,21 @@
 import { h, Component } from 'preact';
 import PropTypes from 'prop-types';
+import { FocusTrap } from '../shared/components/focusTrap';
+import { postReactions } from '../actionsPanel/services/reactions.js';
+import { EmailPreferencesForm } from './components/EmailPreferencesForm';
+import { FollowTags } from './components/FollowTags';
+import { FollowUsers } from './components/FollowUsers';
+import { ProfileForm } from './components/ProfileForm';
 
-import IntroSlide from './components/IntroSlide';
-import EmailPreferencesForm from './components/EmailPreferencesForm';
-import FollowTags from './components/FollowTags';
-import FollowUsers from './components/FollowUsers';
-import ProfileForm from './components/ProfileForm';
-
-export default class Onboarding extends Component {
+export class Onboarding extends Component {
   constructor(props) {
     super(props);
 
-    const url = new URL(window.location);
-    const previousLocation = url.searchParams.get('referrer');
+    this.recordBillboardConversion();
 
-    const slides = [
-      IntroSlide,
-      FollowTags,
-      ProfileForm,
-      FollowUsers,
-      EmailPreferencesForm,
-    ];
+    const isRoot = document.body.dataset.isRootSubforem === 'true';
+
+    const slides = isRoot ? [ProfileForm, EmailPreferencesForm] : [ProfileForm, FollowTags, FollowUsers, EmailPreferencesForm];
 
     this.nextSlide = this.nextSlide.bind(this);
     this.prevSlide = this.prevSlide.bind(this);
@@ -36,8 +31,8 @@ export default class Onboarding extends Component {
         prev={this.prevSlide}
         slidesCount={this.slidesCount}
         currentSlideIndex={index}
+        key={index}
         communityConfig={props.communityConfig}
-        previousLocation={previousLocation}
       />
     ));
   }
@@ -49,8 +44,17 @@ export default class Onboarding extends Component {
       this.setState({
         currentSlide: nextSlide,
       });
+    } else if (
+      localStorage &&
+      localStorage.getItem('last_interacted_billboard')
+    ) {
+      const obj = JSON.parse(localStorage.getItem('last_interacted_billboard'));
+      if (obj.path && obj.time && Date.parse(obj.time) > Date.now() - 900000) {
+        window.location.href = obj.path;
+      } else {
+        window.location.href = '/';
+      }
     } else {
-      // Redirect to the main feed at the end of onboarding.
       window.location.href = '/';
     }
   }
@@ -65,6 +69,57 @@ export default class Onboarding extends Component {
     }
   }
 
+  recordBillboardConversion() {
+    if (!localStorage || !localStorage.getItem('last_interacted_billboard')) {
+      return;
+    }
+    const dataBody = JSON.parse(
+      localStorage.getItem('last_interacted_billboard'),
+    );
+
+    if (dataBody && dataBody['billboard_event']) {
+      dataBody['billboard_event']['category'] = 'signup';
+
+      const tokenMeta = document.querySelector("meta[name='csrf-token']");
+      const csrfToken = tokenMeta && tokenMeta.getAttribute('content');
+      window.fetch('/bb_tabulations', {
+        method: 'POST',
+        headers: {
+          'X-CSRF-Token': csrfToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(dataBody),
+        credentials: 'same-origin',
+      });
+    }
+
+    if (
+      dataBody &&
+      dataBody['billboard_event'] &&
+      dataBody['billboard_event']['article_id']
+    ) {
+      window
+        .fetch(`/api/articles/${dataBody['billboard_event']['article_id']}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'same-origin',
+        })
+        .then((response) => response.json())
+        .then((data) => {
+          if (data.id) {
+            localStorage.setItem('onboarding_article', JSON.stringify(data));
+            postReactions({
+              reactable_type: 'Article',
+              category: 'like',
+              reactable_id: data.id,
+            });
+          }
+        });
+    }
+  }
+  // TODO: Update main element id to enable skip link. See issue #1153.
   render() {
     const { currentSlide } = this.state;
     const { communityConfig } = this.props;
@@ -72,12 +127,21 @@ export default class Onboarding extends Component {
       <main
         className="onboarding-body"
         style={
-          communityConfig.communityBackground && {
-            backgroundImage: `url(${communityConfig.communityBackground})`,
-          }
+          communityConfig.communityBackgroundColor &&
+          communityConfig.communityBackgroundColor2
+            ? {
+                background: `linear-gradient(${communityConfig.communityBackgroundColor}, 
+                                             ${communityConfig.communityBackgroundColor2})`,
+              }
+            : { top: 777 }
         }
       >
-        {this.slides[currentSlide]}
+        <FocusTrap
+          key={`onboarding-${currentSlide}`}
+          clickOutsideDeactivates="true"
+        >
+          {this.slides[currentSlide]}
+        </FocusTrap>
       </main>
     );
   }
@@ -86,7 +150,7 @@ export default class Onboarding extends Component {
 Onboarding.propTypes = {
   communityConfig: PropTypes.shape({
     communityName: PropTypes.string.isRequired,
-    communityBackground: PropTypes.string.isRequired,
+    communityBackgroundColor: PropTypes.string.isRequired,
     communityLogo: PropTypes.string.isRequired,
     communityDescription: PropTypes.string.isRequired,
   }).isRequired,

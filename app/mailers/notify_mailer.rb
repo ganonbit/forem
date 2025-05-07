@@ -1,12 +1,32 @@
 class NotifyMailer < ApplicationMailer
+  has_history extra: lambda {
+    {
+      feedback_message_id: params[:feedback_message_id],
+      utm_campaign: params[:email_type]
+    }
+  }, only: :feedback_message_resolution_email
+
   def new_reply_email
     @comment = params[:comment]
+    sanitized_comment = ApplicationController.helpers.sanitize(@comment.processed_html,
+                                                               scrubber: CommentEmailScrubber.new)
+    @truncated_comment = ApplicationController.helpers.truncate(sanitized_comment, length: 500, separator: " ",
+                                                                                   omission: "...", escape: false)
+
     @user = @comment.parent_user
+    return if @user.email.blank?
     return if RateLimitChecker.new.limit_by_email_recipient_address(@user.email)
 
     @unsubscribe = generate_unsubscribe_token(@user.id, :email_comment_notifications)
 
-    mail(to: @user.email, subject: "#{@comment.user.name} replied to your #{@comment.parent_type}")
+    # Don't send the email if there's no visible contents
+    # Placed here to allow the preview to continue to work
+    return if @truncated_comment.blank?
+
+    mail(to: @user.email,
+         subject: I18n.t("mailers.notify_mailer.new_reply", name: @comment.user.name, type: @comment.parent_type))
+  rescue StandardError => e
+    Honeybadger.notify(e)
   end
 
   def new_follower_email
@@ -28,9 +48,12 @@ class NotifyMailer < ApplicationMailer
 
     @mentioner = User.find(@mention.mentionable.user_id)
     @mentionable = @mention.mentionable
+    @mentionable_type = @mention.decorate.formatted_mentionable_type
+
     @unsubscribe = generate_unsubscribe_token(@user.id, :email_mention_notifications)
 
-    mail(to: @user.email, subject: "#{@mentioner.name} just mentioned you!")
+    mail(to: @user.email,
+         subject: I18n.t("mailers.notify_mailer.new_mention", name: @mentioner.name, type: @mentionable_type))
   end
 
   def unread_notifications_email
@@ -39,14 +62,15 @@ class NotifyMailer < ApplicationMailer
 
     @unread_notifications_count = @user.notifications.unread.count
     @unsubscribe = generate_unsubscribe_token(@user.id, :email_unread_notifications)
-    subject = "🔥 You have #{@unread_notifications_count} unread notifications on #{SiteConfig.community_name}"
+    subject = I18n.t("mailers.notify_mailer.unread_notifications", count: @unread_notifications_count,
+                                                                   community: Settings::Community.community_name)
     mail(to: @user.email, subject: subject)
   end
 
   def video_upload_complete_email
     @article = params[:article]
     @user = @article.user
-    mail(to: @user.email, subject: "Your video upload is complete")
+    mail(to: @user.email, subject: I18n.t("mailers.notify_mailer.video_upload"))
   end
 
   def new_badge_email
@@ -55,15 +79,18 @@ class NotifyMailer < ApplicationMailer
     @badge = @badge_achievement.badge
     @unsubscribe = generate_unsubscribe_token(@user.id, :email_badge_notifications)
 
-    mail(to: @user.email, subject: "You just got a badge")
+    mail(to: @user.email, subject: I18n.t("mailers.notify_mailer.new_badge"))
+  end
+
+  def feedback_response_email
+    mail(to: params[:email_to],
+         subject: I18n.t("mailers.notify_mailer.feedback",
+                         community: Settings::Community.community_name))
   end
 
   def feedback_message_resolution_email
     @user = User.find_by(email: params[:email_to])
     @email_body = params[:email_body]
-
-    track utm_campaign: params[:email_type]
-    track extra: { feedback_message_id: params[:feedback_message_id] }
 
     mail(to: params[:email_to], subject: params[:email_subject])
   end
@@ -72,37 +99,21 @@ class NotifyMailer < ApplicationMailer
     @user = User.find(params[:user_id])
     @email_body = params[:email_body]
 
-    track utm_campaign: "user_contact"
-
     mail(to: @user.email, subject: params[:email_subject])
-  end
-
-  def new_message_email
-    @message = params[:message]
-    @user = @message.direct_receiver
-    subject = "#{@message.user.name} just messaged you"
-    @unsubscribe = generate_unsubscribe_token(@user.id, :email_connect_messages)
-
-    mail(to: @user.email, subject: subject)
-  end
-
-  def channel_invite_email
-    @membership = params[:membership]
-    @inviter = params[:inviter]
-
-    subject = if @membership.role == "mod"
-                "You are invited to the #{@membership.chat_channel.channel_name} channel as moderator."
-              else
-                "You are invited to the #{@membership.chat_channel.channel_name} channel."
-              end
-
-    mail(to: @membership.user.email, subject: subject)
   end
 
   def account_deleted_email
     @name = params[:name]
 
-    subject = "#{SiteConfig.community_name} - Account Deletion Confirmation"
+    subject = I18n.t("mailers.notify_mailer.account_deleted", community: Settings::Community.community_name)
+    mail(to: params[:email], subject: subject)
+  end
+
+  def organization_deleted_email
+    @name = params[:name]
+    @org_name = params[:org_name]
+
+    subject = I18n.t("mailers.notify_mailer.org_deleted", community: Settings::Community.community_name)
     mail(to: params[:email], subject: subject)
   end
 
@@ -111,7 +122,7 @@ class NotifyMailer < ApplicationMailer
     @name = user.name
     @token = params[:token]
 
-    subject = "#{SiteConfig.community_name} - Account Deletion Requested"
+    subject = I18n.t("mailers.notify_mailer.deletion_requested", community: Settings::Community.community_name)
     mail(to: user.email, subject: subject)
   end
 
@@ -120,7 +131,7 @@ class NotifyMailer < ApplicationMailer
 
     export_filename = "devto-export-#{Date.current.iso8601}.zip"
     attachments[export_filename] = attachment
-    mail(to: params[:email], subject: "The export of your content is ready")
+    mail(to: params[:email], subject: I18n.t("mailers.notify_mailer.export"))
   end
 
   def tag_moderator_confirmation_email
@@ -128,20 +139,30 @@ class NotifyMailer < ApplicationMailer
     @tag = params[:tag]
     @channel_slug = params[:channel_slug]
 
-    subject = "Congrats! You're the moderator for ##{@tag.name}"
+    subject = I18n.t("mailers.notify_mailer.moderator", tag_name: @tag.name)
     mail(to: @user.email, subject: subject)
   end
 
   def trusted_role_email
     @user = params[:user]
 
-    subject = "Congrats! You're now a \"trusted\" user on #{SiteConfig.community_name}!"
+    subject = I18n.t("mailers.notify_mailer.trusted",
+                     community: Settings::Community.community_name)
+    mail(to: @user.email, subject: subject)
+  end
+
+  def base_subscriber_role_email
+    @user = params[:user]
+
+    subject = I18n.t("mailers.notify_mailer.base_subscriber",
+                     community: Settings::Community.community_name)
     mail(to: @user.email, subject: subject)
   end
 
   def subjects
     {
-      new_follower_email: "just followed you on #{SiteConfig.community_name}".freeze
+      new_follower_email: I18n.t("mailers.notify_mailer.new_follower",
+                                 community: Settings::Community.community_name).freeze
     }.freeze
   end
 end

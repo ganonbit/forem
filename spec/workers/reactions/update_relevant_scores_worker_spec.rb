@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe Reactions::UpdateRelevantScoresWorker, type: :worker do
+RSpec.describe Reactions::UpdateRelevantScoresWorker, throttled_call: true, type: :worker do
   describe "#perform" do
     let(:article) { create(:article) }
     let(:reaction) { create(:reaction, reactable: article) }
@@ -33,6 +33,13 @@ RSpec.describe Reactions::UpdateRelevantScoresWorker, type: :worker do
       end
     end
 
+    it "recalculates score if reactable is User" do
+      user = create(:user)
+      reaction.update_columns(category: "vomit", reactable_id: user.id, reactable_type: "User", points: -50)
+      worker.perform(reaction.id)
+      expect(user.reload.score).to be < -1
+    end
+
     it "updates the reactable Comment" do
       updated_at = 1.day.ago
       comment.update_columns(updated_at: updated_at)
@@ -44,6 +51,13 @@ RSpec.describe Reactions::UpdateRelevantScoresWorker, type: :worker do
       expect do
         worker.perform(Reaction.maximum(:id).to_i + 1)
       end.not_to raise_error
+    end
+
+    it "uses a throttled call for syncing the reactions count" do
+      worker.perform(reaction.id)
+
+      expect(ThrottledCall).to have_received(:perform)
+        .with(:sync_reactions_count, throttle_for: instance_of(ActiveSupport::Duration))
     end
   end
 end

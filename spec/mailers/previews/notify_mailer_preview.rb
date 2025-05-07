@@ -13,8 +13,13 @@ class NotifyMailerPreview < ActionMailer::Preview
     NotifyMailer.with(user: User.last).unread_notifications_email
   end
 
-  def new_mention_email
+  def new_comment_mention_email
     mention = Mention.find_or_create_by(user: User.find(1), mentionable: Comment.find(1))
+    NotifyMailer.with(mention: mention).new_mention_email
+  end
+
+  def new_article_mention_email
+    mention = Mention.find_or_create_by(user: User.find(1), mentionable: Article.find(1))
     NotifyMailer.with(mention: mention).new_mention_email
   end
 
@@ -32,18 +37,16 @@ class NotifyMailerPreview < ActionMailer::Preview
     NotifyMailer.with(badge_achievement: badge_achievement).new_badge_email
   end
 
-  def channel_invite_email
-    user = User.first
-    membership = ChatChannelMembership.last
-    NotifyMailer.with(membership: membership, inviter: user).channel_invite_email
-  end
-
   def tag_moderator_confirmation_email
-    NotifyMailer.with(user: User.first, tag: Tag.find(1), channel_slug: nil).tag_moderator_confirmation_email
+    NotifyMailer.with(user: User.first, tag: Tag.find(1)).tag_moderator_confirmation_email
   end
 
   def trusted_role_email
     NotifyMailer.with(user: User.first).trusted_role_email
+  end
+
+  def base_subscriber_role_email
+    NotifyMailer.with(user: User.first).base_subscriber_role_email
   end
 
   def feedback_message_resolution_email
@@ -64,7 +67,7 @@ class NotifyMailerPreview < ActionMailer::Preview
     HEREDOC
     params = {
       email_to: @user.email,
-      email_subject: "Courtesy notice from #{SiteConfig.community_name}",
+      email_subject: "Courtesy notice from #{Settings::Community.community_name}",
       email_body: email_body,
       email_type: "Reporter",
       feedback_message_id: rand(100)
@@ -79,6 +82,12 @@ class NotifyMailerPreview < ActionMailer::Preview
   def account_deleted_email
     user = User.last
     NotifyMailer.with(name: user.name, email: user.email).account_deleted_email
+  end
+
+  def organization_deleted_email
+    user = User.last
+    org = Organization.last
+    NotifyMailer.with(name: user.name, org_name: org.name, email: user.email).organization_deleted_email
   end
 
   def export_email

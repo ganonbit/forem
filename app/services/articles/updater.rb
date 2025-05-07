@@ -1,73 +1,88 @@
 module Articles
   class Updater
-    def initialize(user, article_id, article_params, event_dispatcher = Webhook::DispatchEvent)
-      @user = user
-      @article_id = article_id
-      @article_params = article_params
-      @event_dispatcher = event_dispatcher
+    Result = Struct.new(:success, :article, keyword_init: true)
+
+    def self.call(...)
+      new(...).call
     end
 
-    def self.call(*args)
-      new(*args).call
+    def initialize(user, article, article_params)
+      @user = user
+      @article = article
+      @article_params = normalize_params(article_params)
     end
 
     def call
       user.rate_limiter.check_limit!(:article_update)
+      success = article.update(article_params)
 
-      article = load_article
-      was_published = article.published
+      if success
+        user.rate_limiter.track_limit_by_action(:article_update)
 
-      # the client can change the series the article belongs to
-      if article_params.key?(:series)
-        series = article_params[:series]
-        article.collection = Collection.find_series(series, article.user) if series.present?
-        article.collection = nil if series.nil?
+        remove_all_notifications if became_unpublished?
+        send_to_mentioned_users_and_followers if remains_published?
+        refresh_auto_audience_segments if became_published?
       end
 
-      # convert tags from array to a string
-      tags = article_params[:tags]
-      if tags.present?
-        article_params[:tag_list] = tags.join(", ")
-        article_params.delete(:tags)
-      end
-
-      # updated edited time only if already published and not edited by an admin
-      update_edited_at = article.user == user && article.published
-      article_params[:edited_at] = Time.current if update_edited_at
-
-      article.update!(article_params)
-      user.rate_limiter.track_limit_by_action(:article_update)
-
-      # send notification only the first time an article is published
-      send_notification = article.published && article.saved_change_to_published_at.present?
-      Notification.send_to_followers(article, "Published") if send_notification
-
-      # remove related notifications if unpublished
-      if article.saved_changes["published"] == [true, false]
-        Notification.remove_all_by_action_without_delay(notifiable_ids: article.id, notifiable_type: "Article",
-                                                        action: "Published")
-        if article.comments.exists?
-          Notification.remove_all(notifiable_ids: article.comments.ids,
-                                  notifiable_type: "Comment")
-        end
-      end
-      # don't send only if article keeps being unpublished
-      dispatch_event(article) if article.published || was_published
-
-      article.decorate
+      Result.new(success: success, article: article.decorate)
     end
 
     private
 
-    attr_reader :user, :article_id, :article_params, :event_dispatcher
+    attr_reader :user, :article, :article_params
 
-    def dispatch_event(article)
-      event_dispatcher.call("article_updated", article)
+    def normalize_params(original_params)
+      article_params = original_params.dup
+
+      # updated edited time only if already published and not edited by an admin
+      update_edited_at = article.user == user && article.published
+
+      # remove published_at values received from a user if an articles was published before (has past published_at)
+      # published_at will remain as it was in this case
+      article_params.delete :published_at if article.published_at && !article.scheduled?
+
+      # NOTE: It's surprising that this is article.user and not @user
+      Articles::Attributes.new(article_params, article.user)
+        .for_update(update_edited_at: update_edited_at)
     end
 
-    def load_article
-      relation = user.has_role?(:super_admin) ? Article.includes(:user) : user.articles
-      relation.find(article_id)
+    def refresh_auto_audience_segments
+      user.refresh_auto_audience_segments
+    end
+
+    def became_published?
+      article.published? && !article.published_previously_was
+    end
+
+    def remains_published?
+      article.published && article.saved_change_to_published.blank?
+    end
+
+    def became_unpublished?
+      article.saved_changes["published"] == [true, false]
+    end
+
+    # If the article has already been published and is only being updated, then we need to create
+    # mentions and send notifications to mentioned users inline via the Mentions::CreateAll service.
+    def send_to_mentioned_users_and_followers
+      Mentions::CreateAll.call(article)
+    end
+
+    # Remove any associated notifications if Article is unpublished
+    def remove_all_notifications
+      Notification.remove_all_by_action_without_delay(notifiable_ids: article.id, notifiable_type: "Article",
+                                                      action: "Published")
+      ContextNotification.delete_by(context_id: article.id, context_type: "Article",
+                                    action: "Published")
+
+      if article.comments.exists?
+        Notification.remove_all(notifiable_ids: article.comments.ids,
+                                notifiable_type: "Comment")
+      end
+      return unless article.mentions.exists?
+
+      Notification.remove_all(notifiable_ids: article.mentions.ids,
+                              notifiable_type: "Mention")
     end
   end
 end

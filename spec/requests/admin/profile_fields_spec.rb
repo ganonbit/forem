@@ -1,14 +1,13 @@
 require "rails_helper"
 
-RSpec.describe "/admin/profile_fields", type: :request do
+RSpec.describe "/admin/customization/profile_fields" do
   let(:admin) { create(:user, :super_admin) }
 
   before do
     sign_in admin
-    allow(FeatureFlag).to receive(:enabled?).with(:profile_admin).and_return(true)
   end
 
-  describe "GET /admin/profile_fields" do
+  describe "GET /admin/customization/profile_fields" do
     it "renders successfully" do
       get admin_profile_fields_path
       expect(response).to be_successful
@@ -26,13 +25,15 @@ RSpec.describe "/admin/profile_fields", type: :request do
     end
   end
 
-  describe "POST /admin/profile_fields" do
+  describe "POST /admin/customization/profile_fields" do
+    let(:profile_field_group) { create(:profile_field_group) }
     let(:new_profile_field) do
       {
         label: "Test Location",
         input_type: "text_field",
         description: "users' location",
-        placeholder_text: "new york"
+        placeholder_text: "new york",
+        profile_field_group_id: profile_field_group.id
       }
     end
 
@@ -44,7 +45,7 @@ RSpec.describe "/admin/profile_fields", type: :request do
     it "creates a profile_field" do
       expect do
         post admin_profile_fields_path, params: { profile_field: new_profile_field }
-      end.to change { ProfileField.all.count }.by(1)
+      end.to change(ProfileField, :count).by(1)
 
       last_profile_field_record = ProfileField.last
       expect(last_profile_field_record.label).to eq(new_profile_field[:label])
@@ -74,7 +75,7 @@ RSpec.describe "/admin/profile_fields", type: :request do
 
   describe "DELETE /admin/profile_fields/:id" do
     let!(:profile_field) do
-      create(:profile_field).tap { Profile.refresh_attributes! }
+      create(:profile_field)
     end
 
     it "redirects successfully" do

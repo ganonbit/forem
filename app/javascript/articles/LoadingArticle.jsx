@@ -6,6 +6,7 @@ export const LoadingArticle = ({ version }) => {
     <div className="crayons-story__cover">
       <div
         className="crayons-scaffold crayons-story__cover__image"
+        style={{paddingBottom: "42%"}}
         loading="lazy"
       />
     </div>
@@ -29,5 +30,5 @@ export const LoadingArticle = ({ version }) => {
   );
 };
 LoadingArticle.propTypes = {
-  version: PropTypes.string.isRequired,
+  version: PropTypes.string,
 };

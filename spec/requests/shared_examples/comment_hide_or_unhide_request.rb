@@ -24,12 +24,17 @@ RSpec.shared_examples "PATCH /comments/:comment_id/hide or unhide" do |args|
       patch "/comments/#{parent_comment.id}/#{args[:path]}", headers: { HTTP_ACCEPT: "application/json" }
     end
 
+    it "sets hidden_by_commentable_user appropriately" do
+      parent_comment.reload
+      expect(parent_comment.hidden_by_commentable_user).to eq(args[:path] == "hide")
+    end
+
     it "marks article as having hidden comments" do
       expect(article.reload.any_comments_hidden).to eq(args[:path] == "hide")
     end
 
     it "returns a proper JSON response" do
-      expect(JSON.parse(response.body)).to eq("hidden" => args[:hidden])
+      expect(response.parsed_body).to eq("hidden" => args[:hidden])
     end
 
     it "returns 200 on a good request" do
@@ -44,7 +49,7 @@ RSpec.shared_examples "PATCH /comments/:comment_id/hide or unhide" do |args|
       patch "/comments/#{second_comment.id}/hide", headers: { HTTP_ACCEPT: "application/json" }
       patch "/comments/#{third_comment.id}/hide", headers: { HTTP_ACCEPT: "application/json" }
       patch "/comments/#{second_comment.id}/unhide", headers: { HTTP_ACCEPT: "application/json" }
-      expect(article.reload.any_comments_hidden).to eq(true)
+      expect(article.reload.any_comments_hidden).to be(true)
     end
 
     it "displays not having hidden comments if all unhidden" do
@@ -57,7 +62,7 @@ RSpec.shared_examples "PATCH /comments/:comment_id/hide or unhide" do |args|
       patch "/comments/#{parent_comment.id}/unhide", headers: { HTTP_ACCEPT: "application/json" }
       patch "/comments/#{second_comment.id}/unhide", headers: { HTTP_ACCEPT: "application/json" }
       patch "/comments/#{third_comment.id}/unhide", headers: { HTTP_ACCEPT: "application/json" }
-      expect(article.reload.any_comments_hidden).to eq(false)
+      expect(article.reload.any_comments_hidden).to be(false)
     end
   end
 end

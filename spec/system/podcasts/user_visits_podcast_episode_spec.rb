@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "User visits podcast show page", type: :system, js: true do
+RSpec.describe "User visits podcast show page", js: true do
   let(:podcast) { create(:podcast) }
   let(:podcast_episode) { create(:podcast_episode, podcast_id: podcast.id) }
   let(:single_quote_episode) { create(:podcast_episode, title: "What's up doc?!") }
@@ -8,25 +8,24 @@ RSpec.describe "User visits podcast show page", type: :system, js: true do
   it "doesn't detect native capabilities from a non-mobile web browser" do
     visit podcast_episode.path.to_s
 
-    result = execute_script("return Runtime.isNativeIOS('podcast')")
+    result = evaluate_script("window.Forem.Runtime.isNativeIOS('podcast')")
     expect(result).to be false
-    result = execute_script("return Runtime.isNativeAndroid('podcast')")
+    result = evaluate_script("window.Forem.Runtime.isNativeAndroid('podcast')")
     expect(result).to be false
   end
 
-  it "they see the content of the hero", js: true, retry: 3 do
+  it "they see the content of the hero", :flaky, js: true do
     visit podcast_episode.path.to_s
 
     expect(page).to have_text(podcast_episode.title)
     expect(page).to have_css ".record"
-    expect(page).not_to have_css ".published-at"
   end
 
   it "see the new comment box on the page" do
     visit podcast_episode.path.to_s
     expect(page).to have_css "form#new_comment"
-    expect(find("#comment_commentable_type", visible: :hidden).value).to eq("PodcastEpisode")
-    expect(find("#comment_commentable_id", visible: :hidden).value).to eq(podcast_episode.id.to_s)
+    expect(find_by_id("comment_commentable_type", visible: :hidden).value).to eq("PodcastEpisode")
+    expect(find_by_id("comment_commentable_id", visible: :hidden).value).to eq(podcast_episode.id.to_s)
   end
 
   context "when mobile apps read the podcast episode metadata" do
@@ -52,7 +51,7 @@ RSpec.describe "User visits podcast show page", type: :system, js: true do
       podcast_episode = create(:podcast_episode, https: false)
       visit podcast_episode.path.to_s
 
-      expect(page).to have_text(I18n.t("podcasts.statuses.unplayable"))
+      expect(page).to have_text(I18n.t("views.podcasts.statuses.unplayable"))
       expect(page).to have_text("Click here to download")
     end
   end
@@ -64,7 +63,7 @@ RSpec.describe "User visits podcast show page", type: :system, js: true do
     it "doesn't display status_notice" do
       visit podcast_episode.path.to_s
       expect(page).not_to have_text("Random status notice")
-      expect(page).not_to have_text(I18n.t("podcasts.statuses.unplayable"))
+      expect(page).not_to have_text(I18n.t("views.podcasts.statuses.unplayable"))
       expect(page).not_to have_text("Click here to download")
     end
   end

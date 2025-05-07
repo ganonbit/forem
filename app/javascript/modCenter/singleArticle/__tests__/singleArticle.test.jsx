@@ -1,8 +1,8 @@
-/* eslint-disable jest/expect-expect */
 import { h, Fragment } from 'preact';
 import { axe } from 'jest-axe';
-import { render, getNodeText } from '@testing-library/preact';
-import SingleArticle from '../index';
+import { render, getNodeText, waitFor } from '@testing-library/preact';
+import { SingleArticle } from '../index';
+import '@testing-library/jest-dom';
 
 const getTestArticle = () => ({
   id: 1,
@@ -14,68 +14,49 @@ const getTestArticle = () => ({
     articles_count: 1,
     name: 'hello',
   },
+  nthPublishedByAuthor: 1,
 });
 
 describe('<SingleArticle />', () => {
   it('should have no a11y violations', async () => {
+    // TODO: The axe custom rules here should be removed when the below issue is fixed
+    // https://github.com/forem/forem/issues/14100
+    const customAxeRules = {
+      'nested-interactive': { enabled: false },
+    };
+
     const { container } = render(
       <Fragment>
         <SingleArticle {...getTestArticle()} toggleArticle={jest.fn()} />
-        {/* Div below needed for this test to pass while preserve FlagUserModal functionality */}
-        <div
-          data-testid="flag-user-modal-container"
-          class="flag-user-modal-container hidden"
-        />
       </Fragment>,
     );
-    const results = await axe(container);
+    const results = await axe(container, { rules: customAxeRules });
     expect(results).toHaveNoViolations();
   });
 
   it('renders the article title', () => {
-    const { queryByText } = render(
+    const articleProps = getTestArticle();
+    const { getByRole } = render(
       <Fragment>
-        <SingleArticle {...getTestArticle()} toggleArticle={jest.fn()} />
-        <div
-          data-testid="flag-user-modal"
-          class="flag-user-modal-container hidden"
-        />
+        <SingleArticle {...articleProps} toggleArticle={jest.fn()} />
       </Fragment>,
     );
 
-    expect(queryByText(getTestArticle().title)).toBeDefined();
-  });
-
-  it('renders the new clickable article title', () => {
-    const { container } = render(
-      <Fragment>
-        <SingleArticle {...getTestArticle()} toggleArticle={jest.fn()} />
-        <div
-          data-testid="flag-user-modal"
-          class="flag-user-modal-container hidden"
-        />
-      </Fragment>,
-    );
-    const text = getNodeText(
-      container.getElementsByClassName('article-title-link')[0],
-    );
-    expect(text).toContain(getTestArticle().title);
+    expect(
+      getByRole('heading', { name: articleProps.title, level: 3 }),
+    ).toBeInTheDocument();
   });
 
   it('renders the tags', () => {
-    const { queryByText } = render(
+    const { getByText } = render(
       <Fragment>
         <SingleArticle {...getTestArticle()} toggleArticle={jest.fn()} />
-        <div
-          data-testid="flag-user-modal"
-          class="flag-user-modal-container hidden"
-        />
       </Fragment>,
     );
 
-    expect(queryByText('discuss')).toBeDefined();
-    expect(queryByText('javascript')).toBeDefined();
-    expect(queryByText('beginners')).toBeDefined();
+    expect(getByText('discuss')).toBeInTheDocument();
+    expect(getByText('javascript')).toBeInTheDocument();
+    expect(getByText('beginners')).toBeInTheDocument();
   });
 
   it('renders no tags or # symbol when article has no tags', () => {
@@ -83,8 +64,7 @@ describe('<SingleArticle />', () => {
       id: 2,
       title:
         'An article title that is quite very actually rather extremely long with all things considered',
-      path:
-        'an-article-title-that-is-quite-very-actually-rather-extremely-long-with-all-things-considered-fi8',
+      path: 'an-article-title-that-is-quite-very-actually-rather-extremely-long-with-all-things-considered-fi8',
       publishedAt: '2019-06-24T09:32:10.590Z',
       cachedTagList: '',
       user: {
@@ -95,10 +75,6 @@ describe('<SingleArticle />', () => {
     const { container } = render(
       <Fragment>
         <SingleArticle {...article} toggleArticle={jest.fn()} />
-        <div
-          data-testid="flag-user-modal"
-          class="flag-user-modal-container hidden"
-        />
       </Fragment>,
     );
     const text = getNodeText(
@@ -111,10 +87,6 @@ describe('<SingleArticle />', () => {
     const { container } = render(
       <Fragment>
         <SingleArticle {...getTestArticle()} toggleArticle={jest.fn()} />
-        <div
-          data-testid="flag-user-modal"
-          class="flag-user-modal-container hidden"
-        />
       </Fragment>,
     );
     const text = getNodeText(
@@ -123,14 +95,10 @@ describe('<SingleArticle />', () => {
     expect(text).toContain(getTestArticle().user.name);
   });
 
-  it('renders the hand wave emoji if the author has less than 3 articles ', () => {
+  it("renders the hand wave emoji if the article is the author's first, second or third", () => {
     const { container } = render(
       <Fragment>
         <SingleArticle {...getTestArticle()} toggleArticle={jest.fn()} />
-        <div
-          data-testid="flag-user-modal"
-          class="flag-user-modal-container hidden"
-        />
       </Fragment>,
     );
     const text = getNodeText(
@@ -140,17 +108,13 @@ describe('<SingleArticle />', () => {
   });
 
   it('renders the correct formatted published date', () => {
-    const { queryByText } = render(
+    const { getByText } = render(
       <Fragment>
         <SingleArticle {...getTestArticle()} toggleArticle={jest.fn()} />
-        <div
-          data-testid="flag-user-modal"
-          class="flag-user-modal-container hidden"
-        />
       </Fragment>,
     );
 
-    expect(queryByText('Jun 22')).toBeDefined();
+    expect(getByText('Jun 22')).toBeInTheDocument();
   });
 
   it('renders the correct formatted published date as a time if the date is the same day', () => {
@@ -161,10 +125,6 @@ describe('<SingleArticle />', () => {
     render(
       <Fragment>
         <SingleArticle {...article} toggleArticle={jest.fn()} />
-        <div
-          data-testid="flag-user-modal"
-          class="flag-user-modal-container hidden"
-        />
       </Fragment>,
     );
 
@@ -185,16 +145,13 @@ describe('<SingleArticle />', () => {
     const { getByTestId } = render(
       <Fragment>
         <SingleArticle {...article} toggleArticle={toggleArticle} />
-        <div
-          data-testid="flag-user-modal"
-          class="flag-user-modal-container hidden"
-        />
       </Fragment>,
     );
 
-    const button = getByTestId(`mod-article-${article.id}`);
-    button.click();
+    const detailsElement = getByTestId(`mod-article-${article.id}`);
+    const summarySection = detailsElement.getElementsByTagName('summary')[0];
+    summarySection.click();
 
-    expect(toggleArticle).toHaveBeenCalledTimes(1);
+    waitFor(() => expect(toggleArticle).toHaveBeenCalledTimes(1));
   });
 });

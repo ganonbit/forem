@@ -1,3 +1,4 @@
+# Monkey patches to solve historical request issues
 module ValidRequest
   extend ActiveSupport::Concern
 
@@ -9,17 +10,20 @@ module ValidRequest
     # We are at least secure for now.
     return if Rails.env.test?
 
-    if request.referer.present?
-      request.referer.start_with?(URL.url)
+    if (referer = request.referer).present?
+      subforem = Subforem.find_by(domain: request.host)
+      referer.start_with?(URL.url(nil, subforem))
     else
-      null_origin = request.origin == "null"
-      raise ::ActionController::InvalidAuthenticityToken, ::ApplicationController::NULL_ORIGIN_MESSAGE if null_origin
+      origin = request.origin
+      if origin == "null"
+        raise ::ActionController::InvalidAuthenticityToken, ::ApplicationController::NULL_ORIGIN_MESSAGE
+      end
 
-      request.origin.nil? || request.origin.gsub("https", "http") == request.base_url.gsub("https", "http")
+      origin.nil? || origin.gsub("https", "http") == request.base_url.gsub("https", "http")
     end
   end
 
-  def _compute_redirect_to_location(request, options) #:nodoc:
+  def _compute_redirect_to_location(request, options) # :nodoc:
     case options
     # Yet another monkeypatch required to send proper protocol out.
     # In this case we make sure the redirect ends in the app protocol.
@@ -28,9 +32,11 @@ module ValidRequest
     when %r{\A([a-z][a-z\d\-+.]*:|//).*}i
       options
     when String
-      "#{(URL.protocol || request.protocol)}#{request.host_with_port}#{options}"
+      "#{URL.protocol || request.protocol}#{request.host_with_port}#{options}"
     when Proc
       _compute_redirect_to_location request, instance_eval(&options)
+    when Array
+      url_for
     else
       url_for(options)
     end.delete("\0\r\n")

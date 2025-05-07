@@ -1,12 +1,13 @@
 import PropTypes from 'prop-types';
 import { h } from 'preact';
 
-const TagLinks = ({ tags, onClick }) => (
+export const TagLinks = ({ tags, onClick }) => (
   <div className="-ml-1 single-listing__tags">
     {tags.length
       ? tags.map((tag) => {
           return (
             <a
+              key={tag}
               href={`/listings?t=${tag}`}
               onClick={(e) => onClick(e, tag)}
               className="crayons-tag"
@@ -29,5 +30,3 @@ TagLinks.propTypes = {
 TagLinks.defaultProps = {
   tags: [],
 };
-
-export default TagLinks;

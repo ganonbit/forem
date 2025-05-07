@@ -1,6 +1,6 @@
 /* eslint-disable no-alert */
 
-export default function initBlock() {
+export function initBlock() {
   const blockButton = document.getElementById(
     'user-profile-dropdownmenu-block-button',
   );
@@ -48,7 +48,7 @@ export default function initBlock() {
       `Are you sure you want to block this person? This will:
       - prevent them from commenting on your posts
       - block all notifications from them
-      - prevent them from messaging you via DEV Connect`,
+      - hide their posts from your feed`,
     );
     if (confirmBlock) {
       fetch(`/user_blocks`, {

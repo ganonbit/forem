@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "OrganizationsUpdate", type: :request do
+RSpec.describe "OrganizationsUpdate" do
   let(:user) { create(:user, :org_admin) }
   let(:org_id) { user.organizations.first.id }
   let(:article) { create(:article, user_id: user.id) }
@@ -31,13 +31,6 @@ RSpec.describe "OrganizationsUpdate", type: :request do
     expect(Organization.last.profile_updated_at).to be > 2.minutes.ago
   end
 
-  it "updates nav_image" do
-    put "/organizations/#{org_id}", params: { organization: { id: org_id,
-                                                              nav_image: fixture_file_upload("files/podcast.png",
-                                                                                             "image/png") } }
-    expect(Organization.find(org_id).nav_image_url).to be_present
-  end
-
   it "returns not_found if organization is missing" do
     invalid_id = org_id + 100
     expect do
@@ -48,7 +41,7 @@ RSpec.describe "OrganizationsUpdate", type: :request do
   it "returns error if profile image file name is too long" do
     organization = user.organizations.first
     allow(Organization).to receive(:find_by).and_return(organization)
-    image = fixture_file_upload("files/800x600.png", "image/png")
+    image = fixture_file_upload("800x600.png", "image/png")
     allow(image).to receive(:original_filename).and_return("#{'a_very_long_filename' * 15}.png")
 
     put "/organizations/#{org_id}", params: { organization: { id: org_id, profile_image: image } }

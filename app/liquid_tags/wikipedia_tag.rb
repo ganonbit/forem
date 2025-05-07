@@ -1,6 +1,8 @@
 class WikipediaTag < LiquidTagBase
   PARTIAL = "liquids/wikipedia".freeze
-  WIKI_REGEXP = %r{\Ahttps?://([a-z-]+)\.wikipedia.org/wiki/(\S+)\z}.freeze
+  REGISTRY_REGEXP = %r{\Ahttps?://([a-z-]+)\.wikipedia\.org/wiki/(\S+)\z}
+  TEXT_CLEANUP_XPATH = "//div[contains(@class, 'noprint') or contains(@class, 'hatnote')] | " \
+                       "//span[@class='mw-ref'] | //figure | //sup".freeze
 
   def initialize(_tag_name, input, _parse_context)
     super
@@ -21,14 +23,14 @@ class WikipediaTag < LiquidTagBase
   private
 
   def valid_url?(input)
-    input.match?(WIKI_REGEXP)
+    input.match?(REGISTRY_REGEXP)
   end
 
   def get_data(input)
     url = ActionController::Base.helpers.strip_tags(input).strip
-    raise StandardError, "Invalid Wikipedia URL" unless valid_url?(url)
+    raise StandardError, I18n.t("liquid_tags.wikipedia_tag.invalid_wikipedia_url") unless valid_url?(url)
 
-    uri = URI.parse(url)
+    uri = Addressable::URI.parse(url)
     lang = uri.host.split(".", 2).first
     title = uri.path.split("/").last
     anchor = uri.fragment
@@ -42,7 +44,7 @@ class WikipediaTag < LiquidTagBase
 
   def parse_page_with_anchor(url, lang, title, anchor)
     api_url = "https://#{lang}.wikipedia.org/api/rest_v1/page/mobile-sections/#{title}"
-    response = HTTParty.get(api_url, headers: { 'user-agent': URL.url("/contact") })
+    response = HTTParty.get(api_url, headers: { "user-agent": URL.url("/contact") })
     handle_response_error(response, url)
 
     text, section_title = get_section_contents(response, anchor, url)
@@ -57,7 +59,7 @@ class WikipediaTag < LiquidTagBase
 
   def parse_page(url, lang, title)
     api_url = "https://#{lang}.wikipedia.org/api/rest_v1/page/summary/#{title}"
-    response = HTTParty.get(api_url, headers: { 'user-agent': URL.url("/contact") })
+    response = HTTParty.get(api_url, headers: { "user-agent": URL.url("/contact") })
     handle_response_error(response, url)
 
     {
@@ -70,7 +72,8 @@ class WikipediaTag < LiquidTagBase
   def handle_response_error(response, input)
     return if response.code == 200
 
-    raise StandardError, "Couldn't find the Wikipedia article - #{input}: #{response['detail']}"
+    raise StandardError,
+          I18n.t("liquid_tags.wikipedia_tag.article_not_found", input: input, detail: (response["detail"]))
   end
 
   def get_section_contents(response, anchor, input)
@@ -84,19 +87,19 @@ class WikipediaTag < LiquidTagBase
 
     return [text, title] if title.present?
 
-    raise StandardError, "Couldn't find the section of the Wikipedia article - #{input}"
+    raise StandardError, I18n.t("liquid_tags.wikipedia_tag.section_not_found", input: input)
   end
 
   def text_clean_up(text)
     doc = Nokogiri::HTML(text)
-    path_expression = "//div[contains(@class, 'noprint') or contains(@class, 'hatnote')] |
-                      //span[@class='mw-ref'] |
-                      //figure |
-                      //sup"
-    doc.xpath(path_expression).each(&:remove)
+
+    doc.xpath(TEXT_CLEANUP_XPATH).each(&:remove)
     doc.xpath("//a").each { |x| x.replace Nokogiri::XML::Text.new(x.inner_html, x.document) }
+
     doc.to_html
   end
 end
 
 Liquid::Template.register_tag("wikipedia", WikipediaTag)
+
+UnifiedEmbed.register(WikipediaTag, regexp: WikipediaTag::REGISTRY_REGEXP)

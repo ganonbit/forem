@@ -17,7 +17,7 @@ RSpec.describe GithubRepos::RepoSyncWorker, type: :worker do
     end
 
     let(:stubbed_github_repo) do
-      OpenStruct.new(repo.attributes.merge(id: repo.github_id_code, html_url: repo.url)) # rubocop:disable Performance/OpenStruct
+      OpenStruct.new(repo.attributes.merge(id: repo.github_id_code, html_url: repo.url)) # rubocop:disable Style/OpenStructUse, Performance/OpenStruct
     end
     let(:github_client) { instance_double(fake_github_client, repository: stubbed_github_repo) }
 
@@ -30,8 +30,28 @@ RSpec.describe GithubRepos::RepoSyncWorker, type: :worker do
 
       Timecop.freeze(3.days.from_now) do
         worker.perform(repo.id)
-        expect(old_updated_at).not_to eq(GithubRepo.find(repo.id).updated_at)
+        expect(old_updated_at).not_to eq(repo.reload.updated_at)
       end
+    end
+
+    it "updates repo updated_at even if data is unchanged" do
+      worker.perform(repo.id)
+      old_updated_at = repo.updated_at.to_date
+
+      Timecop.freeze(3.days.from_now) do
+        worker.perform(repo.id)
+        expect(old_updated_at).not_to eq(repo.reload.updated_at.to_date)
+      end
+    end
+
+    it "does not touch repo user again if recently updated" do
+      repo.update_column(:updated_at, 1.day.ago)
+      worker.perform(repo.id)
+      old_updated_at = repo.user.reload.github_repos_updated_at
+      repo.update_column(:updated_at, 1.day.ago)
+      worker.perform(repo.id)
+
+      expect(repo.user.reload.github_repos_updated_at).to eq(old_updated_at)
     end
 
     it "destroys unfound repos" do

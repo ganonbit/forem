@@ -1,6 +1,6 @@
 import PropTypes from 'prop-types';
 import { h } from 'preact';
-import listingPropTypes from './listingPropTypes';
+import { listingPropTypes } from './listingPropTypes';
 
 const LocationText = ({ location }) => {
   return location ? (
@@ -9,8 +9,7 @@ const LocationText = ({ location }) => {
       className="crayons-link crayons-link--secondary"
       href={`/listings/?q=${location}`}
     >
-      {'・'}
-      {location}
+      ・{location}
     </a>
   ) : (
     ''
@@ -25,11 +24,11 @@ LocationText.defaultProps = {
   location: null,
 };
 
-const AuthorInfo = ({ listing, onCategoryClick }) => {
+export const AuthorInfo = ({ listing, onCategoryClick }) => {
   const { category, location, author = {} } = listing;
   const { username, name, profile_image_90 } = author;
   return (
-    <footer className="fs-s flex items-center">
+    <div className="fs-s flex items-center">
       <a
         href={`/${username}`}
         className="crayons-avatar crayons-avatar--l mr-2"
@@ -40,6 +39,7 @@ const AuthorInfo = ({ listing, onCategoryClick }) => {
           width="32"
           height="32"
           className="crayons-avatar__image"
+          loading="lazy"
         />
       </a>
 
@@ -59,7 +59,7 @@ const AuthorInfo = ({ listing, onCategoryClick }) => {
           <LocationText location={location} />
         </p>
       </div>
-    </footer>
+    </div>
   );
 };
 
@@ -71,5 +71,3 @@ AuthorInfo.propTypes = {
 AuthorInfo.defaultProps = {
   onCategoryClick: () => {},
 };
-
-export default AuthorInfo;

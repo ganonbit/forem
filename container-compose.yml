@@ -1,4 +1,3 @@
-version: "3"
 services:
   rails:
     image: quay.io/forem/forem:development
@@ -8,13 +7,17 @@ services:
     depends_on:
       - bundle
       - db
-      - elasticsearch
       - redis
       - yarn
+    healthcheck:
+      test: ["CMD", "curl" , "-f", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     environment:
       RAILS_ENV: development
       DATABASE_URL: postgresql://forem:forem@db:5432/PracticalDeveloper_development
-      ELASTICSEARCH_URL: http://elasticsearch:9200
       REDIS_SESSIONS_URL: redis://redis:6379
       REDIS_SIDEKIQ_URL: redis://redis:6379
       REDIS_URL: redis://redis:6379
@@ -24,7 +27,7 @@ services:
       APP_DOMAIN: rails
     volumes:
       - .:/opt/apps/forem:z
-    entrypoint: ["dockerize", "-wait", "tcp://db:5432", "-wait", "http://elasticsearch:9200", "-wait", "tcp://redis:6379", "-wait", "file:///opt/apps/forem/vendor/bundle/.bundle_finished", "-timeout", "2700s"]
+    entrypoint: ["dockerize", "-wait", "tcp://db:5432", "-wait", "tcp://redis:6379", "-wait", "file:///opt/apps/forem/vendor/bundle/.bundle_finished", "-timeout", "2700s"]
     command: [ "bash", "-c", "./scripts/entrypoint.sh bootstrap && bundle exec rails server -b 0.0.0.0 -p 3000"]
 
   bundle:
@@ -36,7 +39,6 @@ services:
       REDIS_SIDEKIQ_URL: redis://redis:6379
       REDIS_URL: redis://redis:6379
       DATABASE_URL: postgresql://forem:forem@db:5432/PracticalDeveloper_development
-      ELASTICSEARCH_URL: http://elasticsearch:9200
     volumes:
       - .:/opt/apps/forem:z
     command: ["./scripts/bundle.sh"]
@@ -50,7 +52,6 @@ services:
       REDIS_SIDEKIQ_URL: redis://redis:6379
       REDIS_URL: redis://redis:6379
       DATABASE_URL: postgresql://forem:forem@db:5432/PracticalDeveloper_development
-      ELASTICSEARCH_URL: http://elasticsearch:9200
     volumes:
       - .:/opt/apps/forem:z
     command: [ "bash", "-c", "yarn install --dev"]
@@ -67,7 +68,6 @@ services:
       REDIS_SIDEKIQ_URL: redis://redis:6379
       REDIS_URL: redis://redis:6379
       DATABASE_URL: postgresql://forem:forem@db:5432/PracticalDeveloper_development
-      ELASTICSEARCH_URL: http://elasticsearch:9200
     volumes:
       - .:/opt/apps/forem:z
     entrypoint: ["dockerize", "-wait", "file:///opt/apps/forem/node_modules/.bin/webpack-dev-server", "-timeout", "300s"]
@@ -77,45 +77,50 @@ services:
     image: quay.io/forem/forem:development
     container_name: forem_seed
     depends_on:
-      - rails
-      - redis
-      - db
-      - elasticsearch
+      rails:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
     environment:
       RAILS_ENV: development
       REDIS_SESSIONS_URL: redis://redis:6379
       REDIS_SIDEKIQ_URL: redis://redis:6379
       REDIS_URL: redis://redis:6379
       DATABASE_URL: postgresql://forem:forem@db:5432/PracticalDeveloper_development
-      ELASTICSEARCH_URL: http://elasticsearch:9200
     volumes:
       - .:/opt/apps/forem:z
-    entrypoint: ["dockerize", "-wait", "tcp://db:5432", "-wait", "http://elasticsearch:9200", "-wait", "tcp://redis:6379", "-wait", "http://rails:3000", "-timeout", "300s"]
     command: ["bundle", "exec", "rake","db:seed"]
 
   sidekiq:
     image: quay.io/forem/forem:development
     container_name: forem_sidekiq
     depends_on:
-      - rails
-      - redis
-      - db
-      - elasticsearch
+      rails:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
     environment:
       RAILS_ENV: development
       REDIS_SESSIONS_URL: redis://redis:6379
       REDIS_SIDEKIQ_URL: redis://redis:6379
       REDIS_URL: redis://redis:6379
       DATABASE_URL: postgresql://forem:forem@db:5432/PracticalDeveloper_development
-      ELASTICSEARCH_URL: http://elasticsearch:9200
     volumes:
       - .:/opt/apps/forem:z
-    entrypoint: ["dockerize", "-wait", "tcp://db:5432", "-wait", "http://elasticsearch:9200", "-wait", "tcp://redis:6379", "-wait", "http://rails:3000", "-timeout", "300s"]
     command: ["bundle", "exec", "sidekiq","-c","2"]
 
   db:
     image: postgres:11-alpine
     container_name: forem_postgresql
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-d" ,"forem", "-U", "forem" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     environment:
       POSTGRES_USER: forem
       POSTGRES_PASSWORD: forem
@@ -127,27 +132,15 @@ services:
 
   redis:
     image: redis:6.0.9-alpine
+    healthcheck:
+      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     container_name: forem_redis
     ports:
       - "6379:6379"
 
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:7.5.2
-    container_name: forem_elasticsearch
-    environment:
-      - cluster.name=forem
-      - bootstrap.memory_lock=true
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-      - "discovery.type=single-node"
-      - xpack.security.enabled=false
-      - xpack.monitoring.enabled=false
-      - xpack.graph.enabled=false
-      - xpack.watcher.enabled=false
-    ports:
-      - "9200:9200"
-    # volumes:
-    #   - es_data:/usr/share/elasticsearch/data:Z
-
 volumes:
   db_data:
-  # es_data:

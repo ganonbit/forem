@@ -1,5 +1,13 @@
 import { h, render } from 'preact';
+import ahoy from 'ahoy.js';
 import { TagsFollowed } from '../leftSidebar/TagsFollowed';
+import {
+  observeBillboards,
+  initializeBillboardVisibility,
+} from '../packs/billboardAfterRenderActions';
+import { observeFeedElements } from '../packs/feedEvents';
+import { setupBillboardInteractivity } from '@utilities/billboardInteractivity';
+import { trackCreateAccountClicks } from '@utilities/ahoy/trackEvents';
 
 /* global userData */
 // This logic is similar to that in initScrolling.js.erb
@@ -10,6 +18,8 @@ const frontPageFeedPathNames = new Map([
   ['/top/year', 'year'],
   ['/top/infinity', 'infinity'],
   ['/latest', 'latest'],
+  ['/following', ''],
+  ['/following/latest', 'latest']
 ]);
 
 /**
@@ -19,12 +29,16 @@ const frontPageFeedPathNames = new Map([
  * @param {object} user The currently logged on user, null if not logged on.
  */
 
-function renderTagsFollowed(tagsFollowedContainer, user = userData()) {
-  if (user === null || document.getElementById('followed-tags-wrapper')) {
-    return;
+function renderTagsFollowed(user = userData()) {
+  const tagsFollowedContainer = document.getElementById(
+    'sidebar-nav-followed-tags',
+  );
+  if (user === null || !tagsFollowedContainer) {
+    // Return and do not render if the user is not logged in
+    // or if this is not the home page.
+    return false;
   }
 
-  // Only render if a user is logged on.
   const { followed_tags } = user; // eslint-disable-line camelcase
   const followedTags = JSON.parse(followed_tags);
 
@@ -38,30 +52,67 @@ function renderTagsFollowed(tagsFollowedContainer, user = userData()) {
     );
   });
 
-  render(
-    <TagsFollowed tags={followedTags} />,
-    tagsFollowedContainer,
-    tagsFollowedContainer.firstElementChild,
-  );
+  render(<TagsFollowed tags={followedTags} />, tagsFollowedContainer);
+  trackTagCogIconClicks();
+}
+
+// Temporary Ahoy Stats for usage reports
+function trackTagCogIconClicks() {
+  document
+    .getElementById('tag-priority-link')
+    ?.addEventListener('click', () => {
+      ahoy.track('Tag settings cog icon click');
+    });
+}
+
+function removeLocalePath(pathname) {
+  return pathname.replace(/^\/locale\/[a-zA-Z-]+\/?/, '/');
+}
+
+function renderSidebar() {
+  const sidebarContainer = document.getElementById('sidebar-wrapper-right');
+  const pathname = removeLocalePath(window.location.pathname);
+
+  // If the screen's width is less than 640 we don't need this extra data.
+  if (
+    sidebarContainer &&
+    screen.width >= 640 &&
+    (pathname === '/' || pathname === '/latest' || pathname.includes('/top/') || pathname.includes('/discover') || pathname.includes('/following'))
+  ) {
+    window
+      .fetch('/sidebars/home')
+      .then((res) => res.text())
+      .then((response) => {
+        sidebarContainer.innerHTML = response;
+        setupBillboardInteractivity();
+      });
+  }
 }
 
 const feedTimeFrame = frontPageFeedPathNames.get(window.location.pathname);
+const homeFeedEl = document.getElementById('homepage-feed');
 
-if (!document.getElementById('featured-story-marker')) {
-  const waitingForDataLoad = setInterval(function dataLoadedCheck() {
+if (document.getElementById('sidebar-nav-followed-tags')) {
+  const waitingForDataLoad = setInterval(() => {
     const { user = null, userStatus } = document.body.dataset;
     if (userStatus === 'logged-out') {
       return;
     }
 
-    if (userStatus === 'logged-in' && user !== null) {
+    if (userStatus === 'logged-in' && user !== null && homeFeedEl) {
       clearInterval(waitingForDataLoad);
       if (document.getElementById('rendered-article-feed')) {
         return;
       }
       import('./homePageFeed').then(({ renderFeed }) => {
-        // We have user data, render followed tags.
-        renderFeed(feedTimeFrame);
+        const callback = () => {
+          initializeBillboardVisibility();
+          observeBillboards();
+          setupBillboardInteractivity();
+          observeFeedElements();
+        };
+
+        renderFeed(feedTimeFrame, callback);
 
         InstantClick.on('change', () => {
           const { userStatus: currentUserStatus } = document.body.dataset;
@@ -77,15 +128,19 @@ if (!document.getElementById('featured-story-marker')) {
             return;
           }
 
-          renderFeed(changedFeedTimeFrame);
+          const callback = () => {
+            initializeBillboardVisibility();
+            observeBillboards();
+            setupBillboardInteractivity();
+            observeFeedElements();
+          };
+
+          renderFeed(changedFeedTimeFrame, callback);
         });
       });
 
-      const tagsFollowedContainer = document.getElementById(
-        'sidebar-nav-followed-tags',
-      );
-
-      if (tagsFollowedContainer) renderTagsFollowed(tagsFollowedContainer);
+      renderTagsFollowed();
+      renderSidebar();
     }
   }, 2);
 }
@@ -96,15 +151,9 @@ InstantClick.on('change', () => {
     return false;
   }
 
-  const tagsFollowedContainer = document.getElementById(
-    'sidebar-nav-followed-tags',
-  );
-
-  if (!tagsFollowedContainer) {
-    // Not on the homepage, so nothing to do.
-    return false;
-  }
-
-  renderTagsFollowed(tagsFollowedContainer);
+  renderTagsFollowed();
+  renderSidebar();
 });
 InstantClick.init();
+
+trackCreateAccountClicks('sidebar-wrapper-left');

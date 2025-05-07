@@ -3,9 +3,10 @@
 
 .listings-columns {
   margin-bottom: var(--su-6);
+  display: grid;
+  gap: var(--su-2);
 
   @media (min-width: $breakpoint-m) {
-    display: grid;
     grid-gap: var(--su-4);
     grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
   }
@@ -13,6 +14,9 @@
 
 .single-listing {
   $el: &;
+
+  // overflow-wrap: anywhere isn't supported in Safari, in which case this fallback applies
+  overflow-wrap: break-word;
   overflow-wrap: anywhere;
   word-break: break-word;
   overflow: hidden;
@@ -23,10 +27,15 @@
     #{$el}:hover & {
       display: block;
     }
+
+    #{$el}:focus-within & {
+      display: block;
+    }
   }
 
   &__tags {
     min-height: var(--su-4);
+    font-size: var(--fs-s);
   }
 
   &__date {
@@ -38,16 +47,15 @@
 
 // New/Edit Listing form
 // Tags dropdown
-// TODO: componetize styling..
+// TODO: componentize styling..
 
 .listingform {
   &__tagsoptions {
-    @include generate-box(
-      $level: 2,
-      $bg: var(--card-bg),
-      $border: var(--card-color),
-      $color: var(--card-color)
-    );
+    background: var(--card-bg);
+    color: var(--card-color);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+      0 4px 6px -2px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0, 0, 0, 0.1);
+    border-radius: var(--radius);
 
     position: absolute;
     left: 0;
@@ -89,5 +97,11 @@
   &__tagsoptionsbottomrow,
   &__tagrules--inactive {
     display: none;
+  }
+}
+
+.listings-modal {
+  .crayons-modal__box__body {
+    padding: 0;
   }
 }

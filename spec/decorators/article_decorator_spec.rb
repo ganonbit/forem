@@ -25,6 +25,15 @@ RSpec.describe ArticleDecorator, type: :decorator do
     end
   end
 
+  describe "#user_data_info_to_json" do
+    it "returns an escaped JSON string" do
+      user = build(:user, name: '\: Hello')
+      allow(article).to receive(:cached_user).and_return(user)
+      decorated = article.decorate
+      expect(JSON.parse(decorated.user_data_info_to_json)).to be_a(Hash)
+    end
+  end
+
   describe "#current_state_path" do
     it "returns the path /:username/:slug when published" do
       article = published_article
@@ -35,6 +44,29 @@ RSpec.describe ArticleDecorator, type: :decorator do
       article = create_article(published: false)
       expected_result = "/#{article.username}/#{article.slug}?preview=#{article.password}"
       expect(article.current_state_path).to eq(expected_result)
+    end
+
+    it "returns the path /:username/:slug?:password when scheduled" do
+      article = create_article(published: true, published_at: Date.tomorrow)
+      expected_result = "/#{article.username}/#{article.slug}?preview=#{article.password}"
+      expect(article.current_state_path).to eq(expected_result)
+    end
+  end
+
+  describe "has_recent_comment_activity?" do
+    it "returns false if no comment activity" do
+      article.last_comment_at = nil
+      expect(article.decorate.has_recent_comment_activity?).to be(false)
+    end
+
+    it "returns true if more recent than passed in value" do
+      article.last_comment_at = 1.week.ago
+      expect(article.decorate.has_recent_comment_activity?(2.weeks.ago)).to be(true)
+    end
+
+    it "returns false if less recent than passed in value" do
+      article.last_comment_at = 4.weeks.ago
+      expect(article.decorate.has_recent_comment_activity?(2.weeks.ago)).to be(false)
     end
   end
 
@@ -48,18 +80,6 @@ RSpec.describe ArticleDecorator, type: :decorator do
       article.canonical_url = ""
       expected_url = "#{ApplicationConfig['APP_PROTOCOL']}#{ApplicationConfig['APP_DOMAIN']}#{article.path}"
       expect(article.decorate.processed_canonical_url).to eq(expected_url)
-    end
-  end
-
-  describe "#comments_to_show_count" do
-    it "returns 25 if does not have a discuss tag" do
-      article.cached_tag_list = ""
-      expect(article.decorate.comments_to_show_count).to eq(25)
-    end
-
-    it "returns 75 if it does have a discuss tag" do
-      article.cached_tag_list = "discuss, python"
-      expect(article.decorate.comments_to_show_count).to eq(75)
     end
   end
 
@@ -94,52 +114,6 @@ RSpec.describe ArticleDecorator, type: :decorator do
       expect(article.decorate.title_length_classification).to eq("medium")
       article.title = "0" * 20
       expect(article.decorate.title_length_classification).to eq("short")
-    end
-  end
-
-  describe "internal_utm_params" do
-    it "returns utm params for a boosted article" do
-      article.boosted_additional_articles = true
-
-      params = ["utm_medium=internal", "utm_campaign=_boosted", "booster_org="]
-      expected_result = "?utm_source=additional_box&#{params.join('&')}"
-      expect(article.decorate.internal_utm_params).to eq(expected_result)
-    end
-
-    it "returns utm params for a boosted article belonging to an organization" do
-      article.boosted_additional_articles = true
-      article.organization = organization
-
-      slug = organization.slug
-      params = ["utm_medium=internal", "utm_campaign=#{slug}_boosted", "booster_org=#{slug}"]
-      expected_result = "?utm_source=additional_box&#{params.join('&')}"
-      expect(article.decorate.internal_utm_params).to eq(expected_result)
-    end
-
-    it "returns utm params for a regular article" do
-      article.boosted_additional_articles = false
-
-      params = ["utm_medium=internal", "utm_campaign=regular", "booster_org="]
-      expected_result = "?utm_source=additional_box&#{params.join('&')}"
-      expect(article.decorate.internal_utm_params).to eq(expected_result)
-    end
-
-    it "returns utm params for a regular article belonging to an organization" do
-      article.boosted_additional_articles = false
-      article.organization = organization
-
-      slug = organization.slug
-      params = ["utm_medium=internal", "utm_campaign=regular", "booster_org=#{slug}"]
-      expected_result = "?utm_source=additional_box&#{params.join('&')}"
-      expect(article.decorate.internal_utm_params).to eq(expected_result)
-    end
-
-    it "returns utm params for an article in a different place" do
-      article.boosted_additional_articles = false
-
-      params = ["utm_medium=internal", "utm_campaign=regular", "booster_org="]
-      expected_result = "?utm_source=homepage&#{params.join('&')}"
-      expect(article.decorate.internal_utm_params("homepage")).to eq(expected_result)
     end
   end
 
@@ -207,40 +181,77 @@ RSpec.describe ArticleDecorator, type: :decorator do
   describe "#long_markdown?" do
     it "returns false if body_markdown is nil" do
       article.body_markdown = nil
-      expect(article.decorate.long_markdown?).to eq false
+      expect(article.decorate.long_markdown?).to be false
     end
 
     it "returns false if body_markdown has fewer characters than LONG_MARKDOWN_THRESHOLD" do
       article.body_markdown = "---\ntitle: Title\n---\n\nHey this is the article"
-      expect(article.decorate.long_markdown?).to eq false
+      expect(article.decorate.long_markdown?).to be false
     end
 
     it "returns true if body_markdown has more characters than LONG_MARKDOWN_THRESHOLD" do
       additional_characters_length = (ArticleDecorator::LONG_MARKDOWN_THRESHOLD + 1) - article.body_markdown.length
       article.body_markdown << Faker::Hipster.paragraph_by_chars(characters: additional_characters_length)
-      expect(article.decorate.long_markdown?).to eq true
+      expect(article.decorate.long_markdown?).to be true
     end
   end
 
   describe "#discussion?" do
     it "returns false if it's not tagged with discuss" do
       article.cached_tag_list = "welcome"
-      expect(article.decorate.discussion?).to eq false
+      expect(article.decorate.discussion?).to be false
     end
 
-    it "returns false if featured number is less than 35 hours ago" do
+    it "returns false if published_at is less than 35 hours ago" do
       Timecop.freeze(Time.current) do
-        article.featured_number = 35.hours.ago.to_i - 1
-        expect(article.decorate.discussion?).to eq false
+        article.published_at = 35.hours.ago - 1
+        expect(article.decorate.discussion?).to be false
       end
     end
 
-    it "returns true if it's tagged with discuss and has a feature number greater than 35 hours ago" do
+    it "returns true if it's tagged with discuss and has a published_at greater than 35 hours ago" do
       Timecop.freeze(Time.current) do
         article.cached_tag_list = "welcome, discuss"
-        article.featured_number = 35.hours.ago.to_i + 1
-        expect(article.decorate.discussion?).to eq true
+        article.published_at = 35.hours.ago + 1
+        expect(article.decorate.discussion?).to be true
       end
+    end
+  end
+
+  describe "#pinned?" do
+    let(:article) { create(:article) }
+
+    it "returns false for an unsaved article" do
+      article = build(:article)
+
+      expect(article.decorate.pinned?).to be(false)
+    end
+
+    it "returns false if no article is pinned" do
+      expect(article.decorate.pinned?).to be(false)
+    end
+
+    it "returns false if another article is pinned" do
+      PinnedArticle.set(create(:article))
+
+      expect(article.decorate.pinned?).to be(false)
+    end
+
+    it "returns true if the article is pinned" do
+      PinnedArticle.set(article)
+
+      expect(article.decorate.pinned?).to be(true)
+    end
+  end
+
+  describe "#permit_adjacent_sponsors" do
+    it "returns true if there is a no user id" do
+      expect(described_class.new(nil).permit_adjacent_sponsors?).to be(true)
+    end
+
+    it "returns the false if the author of the article has their setting set to false" do
+      article.user.setting.update(permit_adjacent_sponsors: false)
+      expect(article.decorate.permit_adjacent_sponsors?).to be(false)
     end
   end
 end

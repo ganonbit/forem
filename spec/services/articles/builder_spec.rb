@@ -6,7 +6,7 @@ RSpec.describe Articles::Builder, type: :service do
   let(:prefill) { nil }
 
   context "when tag_user_editor_v2" do
-    let(:user) { create(:user, editor_version: "v2") }
+    let(:user) { create(:user) }
     let(:tag) { create(:tag) }
     let(:submission_template) { tag.submission_template_customized(user.name).to_s }
     let(:correct_attributes) do
@@ -48,7 +48,7 @@ RSpec.describe Articles::Builder, type: :service do
   end
 
   context "when prefill_user_editor_v2" do
-    let(:user) { create(:user, editor_version: "v2") }
+    let(:user) { create(:user) }
     let(:prefill) { "dsdweewewew" }
     let(:correct_attributes) do
       {
@@ -60,7 +60,7 @@ RSpec.describe Articles::Builder, type: :service do
       }
     end
 
-    it "initializes an article with the correct attributesand needs authorization" do
+    it "initializes an article with the correct attributes and needs authorization" do
       subject, needs_authorization = described_class.call(user, tag, prefill)
 
       expect(subject).to be_an_instance_of(Article)
@@ -89,6 +89,7 @@ RSpec.describe Articles::Builder, type: :service do
   end
 
   context "when tag" do
+    let(:user) { create(:user) }
     let(:tag) { create(:tag) }
     let(:correct_attributes) do
       {
@@ -99,6 +100,7 @@ RSpec.describe Articles::Builder, type: :service do
     end
 
     it "initializes an article with the correct attributes and does not need authorization" do
+      user.setting.update(editor_version: "v1")
       subject, needs_authorization = described_class.call(user, tag, prefill)
 
       expect(subject).to be_an_instance_of(Article)
@@ -108,7 +110,7 @@ RSpec.describe Articles::Builder, type: :service do
   end
 
   context "when user_editor_v2" do
-    let(:user) { create(:user, editor_version: "v2") }
+    let(:user) { create(:user) }
     let(:correct_attributes) do
       {
         user_id: user.id
@@ -125,22 +127,34 @@ RSpec.describe Articles::Builder, type: :service do
   end
 
   context "when user_editor_v1" do
-    let(:correct_attributes) do
-      body = "---\ntitle: \npublished: false\ndescription: \ntags: " \
-        "\n//cover_image: https://direct_url_to_image.jpg\n---\n\n"
+    let(:user) { create(:user) }
 
+    let(:correct_attributes) do
       {
-        body_markdown: body,
         processed_html: "",
         user_id: user.id
       }
     end
 
     it "initializes an article with the correct attributes and does not need authorization" do
+      user.setting.update(editor_version: "v1")
+      allow(FeatureFlag).to receive(:enabled?).with(:schedule_articles).and_return(true)
+
       subject, needs_authorization = described_class.call(user, tag, prefill)
 
       expect(subject).to be_an_instance_of(Article)
       expect(subject).to have_attributes(correct_attributes)
+
+      date = Time.current.strftime("%Y-%m-%d")
+      zone = Time.current.strftime("%z")
+
+      body_start = "---\ntitle: \npublished: false\ndescription: " \
+                   "\ntags: \n# cover_image: https://direct_url_to_image.jpg" \
+                   "\n# Use a ratio of 100:42 for best results.\n# published_at: #{date} "
+
+      expect(subject.body_markdown).to start_with(body_start)
+      expect(subject.body_markdown).to end_with("#{zone}\n---\n\n")
+
       expect(needs_authorization).to be false
     end
   end

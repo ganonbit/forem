@@ -9,8 +9,8 @@ RSpec.describe KatexTag, type: :liquid_tag do
 
     it "generates Katex output" do
       content = "c = \\pm\\sqrt{a^2 + b^2}"
-      rendered = generate_katex_liquid(content).render
-      verify(format: :html) { rendered.gsub(/katex-.{64}\.css/, "katex-fingerprint.css") }
+      rendered = generate_katex_liquid(content).render.gsub(/katex-.{64}\.css/, "katex-fingerprint.css")
+      expect(rendered).to include("/assets/katex-fingerprint.css")
     end
 
     it "includes the css style tag only once when rendering multiple" do
@@ -28,7 +28,7 @@ RSpec.describe KatexTag, type: :liquid_tag do
     end
 
     it "generates Katex errors" do
-      content = "\\c = \\pm\\sqrt{a^2 + b^2}"
+      content = "c = \\pm\\sqrt{a{^2 + b^2}"
       rendered = generate_katex_liquid(content).render
       expect(rendered).to include("ParseError: KaTeX parse error: ")
     end

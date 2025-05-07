@@ -1,6 +1,6 @@
 module Metrics
   class RecordDailyNotificationsWorker
-    include Sidekiq::Worker
+    include Sidekiq::Job
     sidekiq_options queue: :low_priority, retry: 10
 
     EVENT_TITLES = %w[
@@ -9,6 +9,7 @@ module Metrics
       welcome_notification_customize_feed
       welcome_notification_twitter_connect
       welcome_notification_github_connect
+      welcome_notification_google_connect
       welcome_notification_customize_experience
       welcome_notification_discuss_and_ask
       welcome_notification_download_app
@@ -23,7 +24,7 @@ module Metrics
           .where("time > ?", 1.day.ago)
           .where("properties->>'title' = ?", title)
 
-        DatadogStatsClient.count(
+        ForemStatsClient.count(
           "ahoy_events",
           event.size,
           tags: ["title:#{title}"],

@@ -1,12 +1,17 @@
-if Rails.env.test? || ApplicationConfig["HONEYCOMB_API_KEY"].blank?
+require_relative "../../app/lib/honeycomb/noise_cancelling_sampler"
+
+if Rails.env.test?
   Honeycomb.configure do |config|
     config.client = Libhoney::TestClient.new
   end
 else
   honeycomb_api_key = ApplicationConfig["HONEYCOMB_API_KEY"]
+  release_footprint = ApplicationConfig["RELEASE_FOOTPRINT"]
 
   # Honeycomb automatic Rails integration
   notification_events = %w[
+    cache_read.active_support
+    cache_read_multi.active_support
     sql.active_record
     render_template.action_view
     render_partial.action_view
@@ -18,7 +23,13 @@ else
   ].freeze
 
   Honeycomb.configure do |config|
-    config.write_key = honeycomb_api_key
+    config.write_key = honeycomb_api_key.presence
+
+    # libhoney client will automatically fall back to using a null transmission
+    # when no write key is provided, but it will log a warning (visible in a few places)
+    # explicitly override the client to disable the warning
+    config.client = Libhoney::NullClient.new unless config.write_key
+
     if ENV["HONEYCOMB_DISABLE_AUTOCONFIGURE"]
       config.dataset = "background-work"
     else
@@ -27,7 +38,7 @@ else
 
       # Scrub unused data to save space in Honeycomb
       config.presend_hook do |fields|
-        fields["global.build_id"] = ApplicationConfig["RELEASE_FOOTPRINT"]
+        fields["global.build_id"] = release_footprint
 
         if fields.key?("redis.command")
           fields["redis.command"] = fields["redis.command"].slice(0, 300)

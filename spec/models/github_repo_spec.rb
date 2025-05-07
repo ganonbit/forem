@@ -1,18 +1,20 @@
 require "rails_helper"
 
-RSpec.describe GithubRepo, type: :model do
+RSpec.describe GithubRepo do
   let(:user) { create(:user, :with_identity, identities: ["github"]) }
   let(:repo) { create(:github_repo, user: user) }
+  let(:cache_bust) { instance_double(EdgeCache::Bust) }
 
   before do
     omniauth_mock_github_payload
+    allow(EdgeCache::Bust).to receive(:new).and_return(cache_bust)
+    allow(cache_bust).to receive(:call)
   end
 
   describe "validations" do
     describe "builtin validations" do
       subject { repo }
 
-      it { is_expected.to validate_presence_of(:github_id_code) }
       it { is_expected.to validate_presence_of(:name) }
       it { is_expected.to validate_presence_of(:url) }
       it { is_expected.to validate_uniqueness_of(:github_id_code) }
@@ -36,13 +38,11 @@ RSpec.describe GithubRepo, type: :model do
       end
 
       it "busts the correct caches" do
-        allow(CacheBuster).to receive(:bust)
-
         repo.save
 
-        expect(CacheBuster).to have_received(:bust).with(user.path)
-        expect(CacheBuster).to have_received(:bust).with("#{user.path}?i=i")
-        expect(CacheBuster).to have_received(:bust).with("#{user.path}/?i=i")
+        expect(cache_bust).to have_received(:call).with(user.path)
+        expect(cache_bust).to have_received(:call).with("#{user.path}?i=i")
+        expect(cache_bust).to have_received(:call).with("#{user.path}/?i=i")
       end
     end
   end
@@ -58,12 +58,12 @@ RSpec.describe GithubRepo, type: :model do
 
     it "creates a new repo" do
       expect do
-        described_class.upsert(user, params)
+        described_class.upsert(user, **params)
       end.to change(described_class, :count).by(1)
     end
 
     it "creates a repo for the given user" do
-      repo = described_class.upsert(user, params)
+      repo = described_class.upsert(user, **params)
 
       expect(repo.user_id).to eq(user.id)
     end
@@ -81,9 +81,9 @@ RSpec.describe GithubRepo, type: :model do
   describe "::update_to_latest" do
     it "enqueues GithubRepos::RepoSyncWorker" do
       repo.update(updated_at: 1.week.ago)
-      allow(GithubRepos::RepoSyncWorker).to receive(:perform_async)
+      allow(GithubRepos::RepoSyncWorker).to receive(:perform_bulk)
       described_class.update_to_latest
-      expect(GithubRepos::RepoSyncWorker).to have_received(:perform_async).with(repo.id)
+      expect(GithubRepos::RepoSyncWorker).to have_received(:perform_bulk).with([[repo.id]])
     end
   end
 end

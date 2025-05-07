@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "GithubRepos", type: :request do
+RSpec.describe "GithubRepos" do
   let(:fake_github_client) do
     Class.new(Github::OauthClient) do
       def repositories(*_args); end
@@ -23,7 +23,7 @@ RSpec.describe "GithubRepos", type: :request do
       html_url: Faker::Internet.url,
     )
 
-    [OpenStruct.new(repo1_params), OpenStruct.new(repo2_params)] # rubocop:disable Performance/OpenStruct
+    [OpenStruct.new(repo1_params), OpenStruct.new(repo2_params)] # rubocop:disable Performance/OpenStruct, Style/OpenStructUse
   end
   let(:github_client) do
     instance_double(
@@ -41,7 +41,7 @@ RSpec.describe "GithubRepos", type: :request do
 
   before do
     omniauth_mock_github_payload
-    allow(SiteConfig).to receive(:authentication_providers).and_return(Authentication::Providers.available)
+    allow(Settings::Authentication).to receive(:providers).and_return(Authentication::Providers.available)
     allow(Github::OauthClient).to receive(:new).and_return(github_client)
   end
 

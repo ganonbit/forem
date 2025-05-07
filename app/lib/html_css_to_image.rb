@@ -5,6 +5,8 @@ module HtmlCssToImage
   CACHE_EXPIRATION = 6.weeks
 
   def self.url(html:, css: nil, google_fonts: nil)
+    return fallback_image if ApplicationConfig["HCTI_API_USER_ID"].blank? || ApplicationConfig["HCTI_API_KEY"].blank?
+
     image = HTTParty.post("https://hcti.io/v1/image",
                           body: { html: html, css: css, google_fonts: google_fonts },
                           basic_auth: AUTH)
@@ -27,6 +29,6 @@ module HtmlCssToImage
   end
 
   def self.fallback_image
-    SiteConfig.main_social_image.to_s
+    Settings::General.main_social_image.to_s
   end
 end
