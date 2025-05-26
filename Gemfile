@@ -24,7 +24,7 @@ gem "carrierwave", "~> 2.2" # Upload files in your Ruby applications, map them t
 gem "carrierwave-bombshelter", "~> 0.2" # Protect your carrierwave from image bombs
 gem "cgi", "~> 0.3.6" # Support for the Common Gateway Interface protocol.
 gem "cld3", "~> 3.5" # Ruby interface for Compact Language Detector v3
-gem "cloudinary", "~> 1.23" # Client library for easily using the Cloudinary service
+gem "cloudinary", "~> 2.3" # Client library for easily using the Cloudinary service
 gem "counter_culture", "~> 3.2" # counter_culture provides turbo-charged counter caches that are kept up-to-date
 gem "countries", "~> 5.5" # All sorts of useful information about every country packaged as pretty little country objects. It includes data from ISO 3166
 gem "ddtrace", "~> 1.16.2" # ddtrace is Datadog’s tracing client for Ruby.
